@@ -45,6 +45,8 @@ project "Game"
         SRC_DIR
 	}
 
+	includedirs {ENTT_DIR .. "/src"}
+
     links {"raylib"}
 	includedirs {RAYLIB_DIR .. "/src", RAYLIB_DIR .. "/src/external/glfw/include" }
 	defines{"PLATFORM_DESKTOP"}
