@@ -8,7 +8,7 @@ static void SetupWindow() {
 	InitWindow(1600, 1000, "Game");
 }
 
-constexpr Vector3 CameraOffset = { -6.f, 12.5f, -6.f };
+constexpr Vector3 CameraOffset = { -8.f, 20.f, -8.f };
 
 static Camera SetupCamera() {
 	Camera camera;
@@ -16,69 +16,81 @@ static Camera SetupCamera() {
 	camera.target = { 0.f, 0.f, 0.f };
 	camera.projection = CAMERA_PERSPECTIVE;
 	camera.up = { 0.f, 1.f, 0.f };
-	camera.fovy = 75.f;
+	camera.fovy = 70.f;
 	SetCameraMode(camera, CAMERA_CUSTOM);
 	return camera;
 }
 
 struct RelativeInput {
-	float X;
-	float Z;
+	float Forward;
+	float Left;
 };
+
+constexpr Vector3 Forward3 = { 0.f, 0.f, 1.f };
+constexpr Vector3 Left3 = { 1.f, 0.f, 0.f };
+constexpr Vector3 Up3 = { 0.f, 1.f, 0.f };
 
 struct PlayerComponent {};
 struct PositionComponent {
-	float X;
-	float Y;
-	float Z;
+	Vector3 Position;
 };
 struct OrientationComponent {
-	float Angle;
+	Quaternion Quaternion;
 };
 
-static void DrawSpaceShip(const Vector3& position, float orientation) {
-	static float TwoThirdsPiCos = cosf(-2.f * PI / 3.f);
+static void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
+	constexpr float Angle = -2.f * PI / 3.f;
 	static float TwoThirdsPiSin = sinf(-2.f * PI / 3.f);
-	constexpr float Size = 2.f;
+	constexpr float Length = 1.25f;
+	constexpr float Width = 0.6f;
+	constexpr float Height = 0.6f;
+	constexpr Vector3 UpShift = { 0.f, Height, 0.f };
+	constexpr Vector3 DownShift = { 0.f, 2.f * Height, 0.f };
 
-	float x1 = cosf(orientation);
-	float y1 = sinf(orientation);
-	Vector3 forward = { x1 * Size, 0.f, y1 * Size };
+	Vector3 forward = Vector3RotateByQuaternion(Forward3, orientation);
+	Vector3 left = Vector3RotateByQuaternion(Left3, orientation);
+	Vector3 up = Vector3RotateByQuaternion(Up3, orientation);
 
-	float x2 = (TwoThirdsPiCos * x1) - (TwoThirdsPiSin * y1);
-	float y2 = (TwoThirdsPiSin * x1) + (TwoThirdsPiCos * y1);
-	Vector3 left = { x2 * Size, 0.f, y2 * Size };
+	Quaternion triangleQuat = QuaternionFromAxisAngle(up, Angle);
 
-	float x3 = (TwoThirdsPiCos * x2) - (TwoThirdsPiSin * y2);
-	float y3 = (TwoThirdsPiSin * x2) + (TwoThirdsPiCos * y2);
-	Vector3 right = { x3 * Size, 0.f, y3 * Size };
+	Vector3 vertex1 = Vector3Add(Vector3Scale(forward, Length), position);
 
-	Vector3 vertex1 = Vector3Add(forward, position);
-	Vector3 vertex2 = Vector3Add(left, position);
-	Vector3 vertex3 = Vector3Add(right, position);
+	Vector3 relVertex = Vector3RotateByQuaternion(forward, triangleQuat);
+	Vector3 vertex2 = Vector3Add(Vector3Add(Vector3Scale(relVertex, Width), position), UpShift);
 
-	DrawLine3D(vertex1, position, RED);
-	DrawLine3D(vertex2, position, GREEN);
-	DrawLine3D(vertex3, position, BLUE);
+	relVertex = Vector3RotateByQuaternion(relVertex, triangleQuat);
+	Vector3 vertex3 = Vector3Subtract(Vector3Add(Vector3Scale(relVertex, Width), position), UpShift);
 
-	DrawCube(position, 0.25f, 0.25f, 0.25f, WHITE);
+	DrawLine3D(vertex1, vertex2, RED);
+	DrawLine3D(vertex2, vertex3, RED);
+	DrawLine3D(vertex3, vertex1, RED);
+
+	vertex2 = Vector3Subtract(vertex2, DownShift);
+	vertex3 = Vector3Add(vertex3, DownShift);
+
+	DrawLine3D(vertex1, vertex2, RED);
+	DrawLine3D(vertex2, vertex3, RED);
+	DrawLine3D(vertex3, vertex1, RED);
+
+	Vector3 midBack = Vector3Lerp(vertex2, vertex3, 0.5f);
+	DrawLine3D(vertex1, midBack, RED);
 }
 
 static void Draw(Camera& camera, entt::registry& registry) {
 	for (auto playerEntity : registry.view<PlayerComponent>()) {
 		auto& position = registry.get<PositionComponent>(playerEntity);
-		camera.target = { position.X, position.Y, position.Z };
+		camera.target = position.Position;
 		camera.position = Vector3Add(camera.target, CameraOffset);
 	}
 	UpdateCamera(&camera);
 	BeginDrawing();
-	ClearBackground(BLACK);
+	ClearBackground(DARKGRAY);
 	BeginMode3D(camera);
 	DrawGrid(500, 2.0f);
 	for (auto entity : registry.view<PositionComponent>()) {
 		auto& position = registry.get<PositionComponent>(entity);
 		auto& orientation = registry.get<OrientationComponent>(entity);
-		DrawSpaceShip({ position.X, position.Y, position.Z }, orientation.Angle);
+		DrawSpaceShip(position.Position, orientation.Quaternion);
 	}
 	EndMode3D();
 	EndDrawing();
@@ -91,33 +103,33 @@ RelativeInput UpdateInput(const Camera& camera) {
 	Vector2 normalizedTo = Vector2Normalize(to);
 	Vector2 normalizedOrthogonal = { -normalizedTo.y, normalizedTo.x };
 
-	Vector2 input = {};
+	Vector2 input = { 0.f, 0.f };
 	if (IsGamepadAvailable(0)) {
-		input.x = -GetGamepadAxisMovement(0, 0);
-		input.y = GetGamepadAxisMovement(0, 1);
-		// No way to get camera pan working with pad?
+		input.x = GetGamepadAxisMovement(0, 0);
+		input.y = -GetGamepadAxisMovement(0, 1);
 	}
-	else {
+	else
+	{
 		if (IsKeyDown(KEY_A)) {
-			input.x += 1.f;
-		}
-		if (IsKeyDown(KEY_D)) {
 			input.x -= 1.f;
 		}
+		if (IsKeyDown(KEY_D)) {
+			input.x += 1.f;
+		}
 		if (IsKeyDown(KEY_S)) {
-			input.y += 1.f;
+			input.y -= 1.f;
 		}
 		if (IsKeyDown(KEY_W)) {
-			input.y -= 1.f;
+			input.y += 1.f;
 		}
 		input = Vector2Normalize(input);
 	}
 
 
-	float cos = Vector2DotProduct(input, normalizedTo);
-	float sin = Vector2DotProduct(input, normalizedOrthogonal);
+	float forward = Vector2DotProduct(input, normalizedTo);
+	float left = Vector2DotProduct(input, normalizedOrthogonal);
 
-	return { -sin, -cos };
+	return { forward, left };
 }
 
 static entt::registry SetupSim() {
@@ -126,35 +138,29 @@ static entt::registry SetupSim() {
 
 	entt::entity player = registry.create();
 	registry.emplace<PlayerComponent>(player);
-	registry.emplace<PositionComponent>(player, 0.f, 0.f, 0.f);
-	registry.emplace<OrientationComponent>(player, 0.f);
+	registry.emplace<PositionComponent>(player, 0.f, 2.f, 0.f);
+	registry.emplace<OrientationComponent>(player, QuaternionIdentity());
 
 	return registry;
 }
 
 static void Simulate(entt::registry& registry, RelativeInput input) {
-	constexpr float Speed = 15.f;
+	constexpr float Speed = 12.f;
 	auto playerView = registry.view<PositionComponent, OrientationComponent, PlayerComponent>();
 	auto playerProcess = [input](entt::entity entity, PositionComponent& positionComponent, OrientationComponent& orientationComponent) {
-		float dirX = cosf(orientationComponent.Angle);
-		float dirZ = sinf(orientationComponent.Angle);
+		Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
+		Vector3 displacement = Vector3Scale(forward, GetFrameTime() * Speed);
 
-		float speed = Speed * Vector2Length({ input.X, input.Z }) * GetFrameTime();
+		positionComponent.Position = Vector3Add(positionComponent.Position, displacement);
 
-		positionComponent.X += speed * dirX;
-		positionComponent.Z += speed * dirZ;
+		Vector3 inputTarget = { input.Left, 0.f, input.Forward };
+		Quaternion correctingQuaternion = QuaternionFromVector3ToVector3(forward, inputTarget);
 
-		float lateralProjection = Vector2DotProduct({ input.X, input.Z }, { -dirZ, dirX });
-		if (FloatEquals(lateralProjection, 0.f)) {
+		float delta = 2.5f * GetFrameTime();
 
-			return;
-		}
-		float delta = 1.5f * GetFrameTime();
-		if (lateralProjection < 0.f)
-		{
-			delta *= -1;
-		}
-		orientationComponent.Angle += delta;
+		Quaternion clampedQuaternion = QuaternionSlerp(QuaternionIdentity(), correctingQuaternion, delta);
+
+		orientationComponent.Quaternion = QuaternionMultiply(clampedQuaternion, orientationComponent.Quaternion);
 	};
 	playerView.each(playerProcess);
 }
