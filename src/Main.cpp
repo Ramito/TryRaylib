@@ -30,12 +30,21 @@ constexpr Vector3 Forward3 = { 0.f, 0.f, 1.f };
 constexpr Vector3 Left3 = { 1.f, 0.f, 0.f };
 constexpr Vector3 Up3 = { 0.f, 1.f, 0.f };
 
+namespace SpaceshipData {
+	constexpr float Acceleration = 1.f;
+	constexpr float LinearDrag = 1e-6;
+	constexpr float QuadraticDrag = 1e-3;
+}
+
 struct PlayerComponent {};
 struct PositionComponent {
 	Vector3 Position;
 };
 struct OrientationComponent {
 	Quaternion Quaternion;
+};
+struct VelocityComponent {
+	Vector3 Velocity;
 };
 
 static void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
@@ -86,7 +95,7 @@ static void Draw(Camera& camera, entt::registry& registry) {
 	BeginDrawing();
 	ClearBackground(DARKGRAY);
 	BeginMode3D(camera);
-	DrawGrid(500, 2.0f);
+	DrawGrid(500, 5.0f);
 	for (auto entity : registry.view<PositionComponent>()) {
 		auto& position = registry.get<PositionComponent>(entity);
 		auto& orientation = registry.get<OrientationComponent>(entity);
@@ -122,6 +131,9 @@ RelativeInput UpdateInput(const Camera& camera) {
 		if (IsKeyDown(KEY_W)) {
 			input.y += 1.f;
 		}
+	}
+
+	if (Vector2LengthSqr(input) > 1.f) {
 		input = Vector2Normalize(input);
 	}
 
@@ -139,6 +151,7 @@ static entt::registry SetupSim() {
 	entt::entity player = registry.create();
 	registry.emplace<PlayerComponent>(player);
 	registry.emplace<PositionComponent>(player, 0.f, 2.f, 0.f);
+	registry.emplace<VelocityComponent>(player, 0.f, 0.f, 0.f);
 	registry.emplace<OrientationComponent>(player, QuaternionIdentity());
 
 	return registry;
@@ -146,14 +159,27 @@ static entt::registry SetupSim() {
 
 static void Simulate(entt::registry& registry, RelativeInput input) {
 	constexpr float Speed = 12.f;
-	auto playerView = registry.view<PositionComponent, OrientationComponent, PlayerComponent>();
-	auto playerProcess = [input](entt::entity entity, PositionComponent& positionComponent, OrientationComponent& orientationComponent) {
+	auto playerView = registry.view<PositionComponent, VelocityComponent, OrientationComponent, PlayerComponent>();
+	auto playerProcess = [input](entt::entity entity, PositionComponent& positionComponent, VelocityComponent& velocityComponent, OrientationComponent& orientationComponent) {
+		Vector3 inputTarget = { input.Left, 0.f, input.Forward };
+		float inputLength = Vector3Length(inputTarget);
+
 		Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
-		Vector3 displacement = Vector3Scale(forward, GetFrameTime() * Speed);
+
+		Vector3 acceleration = Vector3Scale(forward, SpaceshipData::Acceleration * inputLength * GetFrameTime());
+		Vector3 velocity = Vector3Add(velocityComponent.Velocity, acceleration);
+
+		float speed = Vector3Length(velocity);
+		if (!FloatEquals(speed, 0.f)) {
+			float drag = speed * SpaceshipData::LinearDrag + speed * speed * SpaceshipData::QuadraticDrag;
+			velocity = Vector3Add(velocity, Vector3Scale(velocity, -drag / speed));
+		}
+
+		velocityComponent.Velocity = velocity;
+		Vector3 displacement = Vector3Scale(velocity, GetFrameTime() * Speed);
 
 		positionComponent.Position = Vector3Add(positionComponent.Position, displacement);
 
-		Vector3 inputTarget = { input.Left, 0.f, input.Forward };
 		Quaternion correctingQuaternion = QuaternionFromVector3ToVector3(forward, inputTarget);
 
 		float delta = 2.5f * GetFrameTime();
