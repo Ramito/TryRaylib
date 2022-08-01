@@ -5,10 +5,10 @@
 
 static void SetupWindow() {
 	SetTargetFPS(120);
-	InitWindow(1600, 1000, "Game");
+	InitWindow(2400, 1500, "Game");
 }
 
-constexpr Vector3 CameraOffset = { -8.f, 20.f, -8.f };
+constexpr Vector3 CameraOffset = { -8.f, 27.f, -8.f };
 
 static Camera SetupCamera() {
 	Camera camera;
@@ -16,7 +16,7 @@ static Camera SetupCamera() {
 	camera.target = { 0.f, 0.f, 0.f };
 	camera.projection = CAMERA_PERSPECTIVE;
 	camera.up = { 0.f, 1.f, 0.f };
-	camera.fovy = 70.f;
+	camera.fovy = 72.f;
 	SetCameraMode(camera, CAMERA_CUSTOM);
 	return camera;
 }
@@ -31,9 +31,10 @@ constexpr Vector3 Left3 = { 1.f, 0.f, 0.f };
 constexpr Vector3 Up3 = { 0.f, 1.f, 0.f };
 
 namespace SpaceshipData {
-	constexpr float Acceleration = 1.f;
-	constexpr float LinearDrag = 1e-6;
-	constexpr float QuadraticDrag = 1e-3;
+	constexpr float MinThrust = 0.5f;
+	constexpr float Thrust = 15.f;
+	constexpr float LinearDrag = 0;
+	constexpr float QuadraticDrag = 1e-2;
 }
 
 struct PlayerComponent {};
@@ -166,7 +167,7 @@ static void Simulate(entt::registry& registry, RelativeInput input) {
 
 		Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
 
-		Vector3 acceleration = Vector3Scale(forward, SpaceshipData::Acceleration * inputLength * GetFrameTime());
+		Vector3 acceleration = Vector3Scale(forward, (SpaceshipData::MinThrust + SpaceshipData::Thrust * inputLength) * GetFrameTime());
 		Vector3 velocity = Vector3Add(velocityComponent.Velocity, acceleration);
 
 		float speed = Vector3Length(velocity);
