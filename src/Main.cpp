@@ -21,9 +21,10 @@ static Camera SetupCamera() {
 	return camera;
 }
 
-struct RelativeInput {
-	float Forward;
+struct GameInput {
+	float Forward;	// Direction is camera relative
 	float Left;
+	bool Fire;
 };
 
 constexpr Vector3 Forward3 = { 0.f, 0.f, 1.f };
@@ -42,15 +43,22 @@ namespace SpaceshipData {
 	constexpr float LinearDrag = 1e-5;
 	constexpr float QuadraticDrag = 1e-3;
 
-	constexpr float Yaw = 0.15f;
+	constexpr float Yaw = 0.4f;
 	constexpr float Pitch = 2.5f;
-	constexpr float Roll = 1.25f;
+	constexpr float Roll = 1.5f;
 
 	constexpr float NegativePitch = 1.25f;
-	constexpr float NegativeRoll = 2.f;
+	constexpr float NegativeRoll = 2.75f;
 
 	constexpr float SteerB = 0.25f;
 	constexpr float SteerM = 1.5f;
+}
+
+namespace WeaponData {
+	constexpr float RateOfFire = 0.3f;
+	constexpr float BulletSpeed = 30.f;
+	constexpr float BulletLifetime = 1.f;
+	constexpr std::array<Vector3, 2> ShootBones = { Vector3 { 0.65f, 0.f, 0.f }, Vector3 { -0.65f, 0.f, 0.f } };
 }
 
 namespace ParticleData {
@@ -60,6 +68,10 @@ namespace ParticleData {
 
 struct SteerComponent {
 	float Steer;
+};
+struct GunComponent {
+	float TimeBeforeNextShot;
+	uint32_t NextShotBone;
 };
 struct ThrustComponent {
 	float Thrust;
@@ -75,7 +87,7 @@ struct VelocityComponent {
 };
 struct SpaceshipInputComponent {
 	uint32_t InputId;
-	RelativeInput Input;
+	GameInput Input;
 };
 struct ParticleComponent {
 	uint32_t LifeTime;
@@ -139,14 +151,20 @@ static void Draw(Camera& camera, entt::registry& registry) {
 
 	for (entt::entity particle : registry.view<ParticleComponent>()) {
 		const Vector3& position = registry.get<PositionComponent>(particle).Position;
-		DrawPoint3D(position, ORANGE);
+		if (!registry.any_of<OrientationComponent>(particle))
+		{
+			DrawPoint3D(position, ORANGE);
+		}
+		else {
+			DrawSphere(position, 0.2f, GREEN);
+		}
 	}
 
 	EndMode3D();
 	EndDrawing();
 }
 
-void UpdateInput(const Camera& camera, std::array<RelativeInput, 4>& gameInputs) {
+void UpdateInput(const Camera& camera, std::array<GameInput, 4>& gameInputs) {
 	Vector2 pos = { camera.position.x, camera.position.z };
 	Vector2 tar = { camera.target.x, camera.target.z };
 	Vector2 to = Vector2Subtract(tar, pos);
@@ -154,13 +172,15 @@ void UpdateInput(const Camera& camera, std::array<RelativeInput, 4>& gameInputs)
 	Vector2 normalizedOrthogonal = { -normalizedTo.y, normalizedTo.x };
 
 	size_t idx = 0;
-	for (RelativeInput& relativeInput : gameInputs) {
+	for (GameInput& gameInput : gameInputs) {
+		bool fire = false;
 		Vector2 input = { 0.f,0.f };
 		if (IsGamepadAvailable(idx)) {
 			input.x = GetGamepadAxisMovement(0, 0);
 			input.y = -GetGamepadAxisMovement(0, 1);
+			fire = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
 		}
-		else
+		else if (idx == 0)
 		{
 			if (IsKeyDown(KEY_A)) {
 				input.x -= 1.f;
@@ -174,6 +194,7 @@ void UpdateInput(const Camera& camera, std::array<RelativeInput, 4>& gameInputs)
 			if (IsKeyDown(KEY_W)) {
 				input.y += 1.f;
 			}
+			fire = IsKeyDown(KEY_SPACE);
 		}
 
 		if (Vector2LengthSqr(input) > 1.f) {
@@ -184,7 +205,7 @@ void UpdateInput(const Camera& camera, std::array<RelativeInput, 4>& gameInputs)
 		float forward = Vector2DotProduct(input, normalizedTo);
 		float left = Vector2DotProduct(input, normalizedOrthogonal);
 
-		relativeInput = { forward, left };
+		gameInput = { forward, left, fire };
 	}
 }
 
@@ -193,12 +214,13 @@ static entt::registry SetupSim() {
 	registry.reserve(64000);
 
 	entt::entity player = registry.create();
-	registry.emplace<SpaceshipInputComponent>(player, 0u, RelativeInput{ 0.f, 0.f });
+	registry.emplace<SpaceshipInputComponent>(player, 0u, GameInput{ 0.f, 0.f, false });
 	registry.emplace<SteerComponent>(player, 0.f);
 	registry.emplace<ThrustComponent>(player, 0.f);
 	registry.emplace<PositionComponent>(player, 0.f, 2.f, 0.f);
 	registry.emplace<VelocityComponent>(player, 0.f, 0.f, 0.f);
 	registry.emplace<OrientationComponent>(player, QuaternionIdentity());
+	registry.emplace<GunComponent>(player, 0.f, 0u);
 
 	return registry;
 }
@@ -207,7 +229,7 @@ static Vector3 HorizontalOrthogonal(const Vector3& vector) {
 	return { -vector.z, vector.y, vector.x };
 }
 
-static void ProcessInput(entt::registry& registry, std::array<RelativeInput, 4> gameInput) {
+static void ProcessInput(entt::registry& registry, std::array<GameInput, 4> gameInput) {
 	for (SpaceshipInputComponent& inputComponent : registry.view<SpaceshipInputComponent>().storage()) {
 		inputComponent.Input = gameInput[inputComponent.InputId];
 	}
@@ -224,7 +246,7 @@ static void Simulate(entt::registry& registry) {
 		SteerComponent& steerComponent,
 		const SpaceshipInputComponent& inputComponent,
 		ThrustComponent& thrustComponent) {
-			const RelativeInput& input = inputComponent.Input;
+			const GameInput& input = inputComponent.Input;
 			Vector3 inputTarget = { input.Left, 0.f, input.Forward };
 			float inputLength = Vector3Length(inputTarget);
 
@@ -327,6 +349,35 @@ static void Simulate(entt::registry& registry) {
 	};
 	playerView.each(playerProcess);
 
+	auto shootView = registry.view<PositionComponent, VelocityComponent, OrientationComponent, SpaceshipInputComponent, GunComponent>();
+	auto shootProcess = [&registry](const PositionComponent& positionComponent,
+		const VelocityComponent& velocityComponent,
+		const OrientationComponent& orientationComponent,
+		const SpaceshipInputComponent& inputComponent,
+		GunComponent& gunComponent) {
+			gunComponent.TimeBeforeNextShot = std::max(gunComponent.TimeBeforeNextShot - deltaTime, 0.f);
+			if (!inputComponent.Input.Fire) {
+				return;
+			}
+			if (gunComponent.TimeBeforeNextShot > 0.f) {
+				return;
+			}
+			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
+			Vector3 offset = Vector3RotateByQuaternion(WeaponData::ShootBones[gunComponent.NextShotBone], orientationComponent.Quaternion);
+			Vector3 shotPosition = Vector3Add(positionComponent.Position, offset);
+			Vector3 shotVelocity = Vector3Add(velocityComponent.Velocity, Vector3Scale(forward, WeaponData::BulletSpeed));
+			entt::entity bullet = registry.create();
+			registry.emplace<PositionComponent>(bullet, shotPosition);
+			registry.emplace<OrientationComponent>(bullet, orientationComponent.Quaternion);
+			registry.emplace<VelocityComponent>(bullet, shotVelocity);
+			registry.emplace<ParticleComponent>(bullet, static_cast<uint32_t>(WeaponData::BulletLifetime / SimTimeData::DeltaTime));
+			gunComponent.NextShotBone += 1;
+			gunComponent.NextShotBone %= WeaponData::ShootBones.size();
+			gunComponent.TimeBeforeNextShot = WeaponData::RateOfFire;
+
+	};
+	shootView.each(shootProcess);
+
 	auto thrustView = registry.view<ThrustComponent, PositionComponent, VelocityComponent, OrientationComponent>();
 	auto thrustParticleProcess = [&](ThrustComponent& thrustComponent,
 		const PositionComponent& positionComponent,
@@ -336,7 +387,7 @@ static void Simulate(entt::registry& registry) {
 			constexpr float RandomModule = 5.5f;
 			constexpr float Offset = 0.4f;
 			constexpr uint32_t MinParticles = 0;
-			constexpr uint32_t MaxParticles = 5;
+			constexpr uint32_t MaxParticles = 3;
 			float relativeThrust = thrustComponent.Thrust / SpaceshipData::Thrust;
 			uint32_t particles = MinParticles + relativeThrust * relativeThrust * MaxParticles;
 
@@ -352,7 +403,7 @@ static void Simulate(entt::registry& registry) {
 				float randZ = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
 				Vector3 randomVelocity = Vector3Scale({ randX, randY, randZ }, RandomModule);
 				registry.emplace<VelocityComponent>(particleEntity, Vector3Add(baseVelocity, randomVelocity));
-				uint32_t lifetime = std::rand() / (RAND_MAX / 1500);
+				uint32_t lifetime = (std::rand() + std::rand()) / (2 * RAND_MAX / 1250);
 				registry.emplace<ParticleComponent>(particleEntity, lifetime);
 			}
 	};
@@ -370,6 +421,11 @@ static void Simulate(entt::registry& registry) {
 			particleComponent.LifeTime--;
 			positionComponent.Position = Vector3Add(positionComponent.Position, Vector3Scale(velocityComponent.Velocity, deltaTime));
 
+			if (registry.any_of<OrientationComponent>(particle)) {
+				// It's a bullet!
+				return;
+			}
+
 			float speed = Vector3Length(velocityComponent.Velocity);
 			if (!FloatEquals(speed, 0.f)) {
 				float drag = speed * ParticleData::LinearDrag + speed * speed * ParticleData::QuadraticDrag;
@@ -385,7 +441,7 @@ void main() {
 	entt::registry registry = SetupSim();
 	double gameStartTime = GetTime();
 	uint32_t simTicks = 0;
-	std::array<RelativeInput, 4> gameInput;
+	std::array<GameInput, 4> gameInput;
 	while (!WindowShouldClose()) {
 		UpdateInput(camera, gameInput);
 		ProcessInput(registry, gameInput);
