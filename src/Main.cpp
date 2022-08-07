@@ -55,8 +55,8 @@ namespace SpaceshipData {
 }
 
 namespace WeaponData {
-	constexpr float RateOfFire = 0.3f;
-	constexpr float BulletSpeed = 30.f;
+	constexpr float RateOfFire = 0.125f;
+	constexpr float BulletSpeed = 75.f;
 	constexpr float BulletLifetime = 1.f;
 	constexpr std::array<Vector3, 2> ShootBones = { Vector3 { 0.65f, 0.f, 0.f }, Vector3 { -0.65f, 0.f, 0.f } };
 }
@@ -295,7 +295,7 @@ static void Simulate(entt::registry& registry) {
 				steeringSign = -1.f;
 			}
 			if (!turn) {
-				steer -= SpaceshipData::Roll * deltaTime;
+				steer -= SpaceshipData::NegativeRoll * deltaTime;
 				steer = std::max(steer, 0.f);
 			}
 			else {
@@ -324,7 +324,15 @@ static void Simulate(entt::registry& registry) {
 			if (turn) {
 				Quaternion rollQuaternion = QuaternionFromAxisAngle(Forward3, -steer);
 
-				Quaternion yawQuaternion = QuaternionFromVector3ToVector3(Forward3, forward);
+				float dot = Vector3DotProduct(Forward3, forward);
+				Quaternion yawQuaternion;
+				if (FloatEquals(dot, -1.f))
+				{
+					yawQuaternion = yawQuaternion = QuaternionFromAxisAngle(Up3, PI);
+				}
+				else {
+					yawQuaternion = QuaternionFromVector3ToVector3(Forward3, forward);
+				}
 
 				Quaternion turningQuaternion = QuaternionFromAxisAngle(Up3, turnAbility * deltaTime);
 
@@ -398,9 +406,9 @@ static void Simulate(entt::registry& registry) {
 			while (particles-- > 0) {
 				entt::entity particleEntity = registry.create();
 				registry.emplace<PositionComponent>(particleEntity, Vector3Add(positionComponent.Position, Vector3Scale(back, Offset)));
-				float randX = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
-				float randY = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
-				float randZ = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+				float randX = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+				float randY = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+				float randZ = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
 				Vector3 randomVelocity = Vector3Scale({ randX, randY, randZ }, RandomModule);
 				registry.emplace<VelocityComponent>(particleEntity, Vector3Add(baseVelocity, randomVelocity));
 				uint32_t lifetime = (std::rand() + std::rand()) / (2 * RAND_MAX / 1250);
