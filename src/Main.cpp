@@ -22,9 +22,11 @@ static Camera SetupCamera() {
 }
 
 struct GameInput {
-	float Forward;	// Direction is camera relative
-	float Left;
-	bool Fire;
+	float Roll;
+	float Pitch;
+	float Yaw;
+	float Thrust;
+	bool Fire = false;
 };
 
 constexpr Vector3 Forward3 = { 0.f, 0.f, 1.f };
@@ -165,47 +167,20 @@ static void Draw(Camera& camera, entt::registry& registry) {
 }
 
 void UpdateInput(const Camera& camera, std::array<GameInput, 4>& gameInputs) {
-	Vector2 pos = { camera.position.x, camera.position.z };
-	Vector2 tar = { camera.target.x, camera.target.z };
-	Vector2 to = Vector2Subtract(tar, pos);
-	Vector2 normalizedTo = Vector2Normalize(to);
-	Vector2 normalizedOrthogonal = { -normalizedTo.y, normalizedTo.x };
-
 	size_t idx = 0;
 	for (GameInput& gameInput : gameInputs) {
-		bool fire = false;
-		Vector2 input = { 0.f,0.f };
 		if (IsGamepadAvailable(idx)) {
-			input.x = GetGamepadAxisMovement(0, 0);
-			input.y = -GetGamepadAxisMovement(0, 1);
-			fire = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+			gameInput.Roll = GetGamepadAxisMovement(idx, GAMEPAD_AXIS_LEFT_X);
+			gameInput.Pitch = -GetGamepadAxisMovement(idx, GAMEPAD_AXIS_LEFT_Y);
+			gameInput.Yaw = GetGamepadAxisMovement(idx, GAMEPAD_AXIS_RIGHT_X);
+			gameInput.Thrust = 0.f;
+			if (IsGamepadButtonDown(idx, GAMEPAD_BUTTON_RIGHT_TRIGGER_2)) {
+				gameInput.Thrust += 1.f;
+			}
+			if (IsGamepadButtonDown(idx, GAMEPAD_BUTTON_LEFT_TRIGGER_2)) {
+				gameInput.Thrust -= 1.f;
+			}
 		}
-		else if (idx == 0)
-		{
-			if (IsKeyDown(KEY_A)) {
-				input.x -= 1.f;
-			}
-			if (IsKeyDown(KEY_D)) {
-				input.x += 1.f;
-			}
-			if (IsKeyDown(KEY_S)) {
-				input.y -= 1.f;
-			}
-			if (IsKeyDown(KEY_W)) {
-				input.y += 1.f;
-			}
-			fire = IsKeyDown(KEY_SPACE);
-		}
-
-		if (Vector2LengthSqr(input) > 1.f) {
-			input = Vector2Normalize(input);
-		}
-
-
-		float forward = Vector2DotProduct(input, normalizedTo);
-		float left = Vector2DotProduct(input, normalizedOrthogonal);
-
-		gameInput = { forward, left, fire };
 	}
 }
 
@@ -247,21 +222,12 @@ static void Simulate(entt::registry& registry) {
 		const SpaceshipInputComponent& inputComponent,
 		ThrustComponent& thrustComponent) {
 			const GameInput& input = inputComponent.Input;
-			Vector3 inputTarget = { input.Left, 0.f, input.Forward };
-			float inputLength = Vector3Length(inputTarget);
 
 			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
+			Vector3 left = Vector3RotateByQuaternion(Left3, orientationComponent.Quaternion);
+			Vector3 up = Vector3RotateByQuaternion(Up3, orientationComponent.Quaternion);
 
-			Vector3 inputDirection = forward;
-			if (!FloatEquals(inputLength, 0.f)) {
-				inputDirection = Vector3Scale(inputTarget, 1.f / inputLength);
-			}
-
-			float thrust = SpaceshipData::MinThrust;
-			float directionProjection = Vector3DotProduct(forward, inputTarget);
-			if (directionProjection > 0.f) {
-				thrust += SpaceshipData::Thrust * directionProjection;
-			}
+			float thrust = SpaceshipData::MinThrust + input.Thrust * SpaceshipData::Thrust;
 
 			thrustComponent.Thrust = thrust;
 
@@ -279,81 +245,21 @@ static void Simulate(entt::registry& registry) {
 
 			positionComponent.Position = Vector3Add(positionComponent.Position, displacement);
 
-			float steer = steerComponent.Steer;
-			float steerSign = (steer >= 0.f) ? 1.f : -1.f;
-			steer *= steerSign;
+			float roll = input.Roll * SpaceshipData::Roll * deltaTime * 0.5f;
+			float yaw = input.Yaw * SpaceshipData::Yaw * deltaTime * 0.5f;
+			float pitch = input.Pitch * SpaceshipData::Pitch * deltaTime * 0.5f;
 
-			float turnCos = Vector3DotProduct(forward, inputDirection);
-			static const float minCos = cosf(std::max(SpaceshipData::Yaw, SpaceshipData::Pitch) * deltaTime);
-			bool turn = minCos > turnCos;
+			Vector3 rollV3 = Vector3Scale(forward, roll);
+			Vector3 yawV3 = Vector3Scale(up, yaw);
+			Vector3 pitchV3 = Vector3Scale(left, pitch);
 
-			float turnDistance = std::clamp(1.f - turnCos, 0.f, 2.f);
-			float targetSteer = SpaceshipData::SteerB + turnDistance * SpaceshipData::SteerM;
+			Vector3 angularSpeedV3 = Vector3Add(Vector3Add(rollV3, yawV3), pitchV3);
 
-			float steeringSign = 1.f;
-			if (Vector3DotProduct(forward, HorizontalOrthogonal(inputDirection)) < 0.f) {
-				steeringSign = -1.f;
-			}
-			if (!turn) {
-				steer -= SpaceshipData::NegativeRoll * deltaTime;
-				steer = std::max(steer, 0.f);
-			}
-			else {
-				if (steeringSign != steerSign || steer > targetSteer) {
-					steer -= SpaceshipData::NegativeRoll * deltaTime;
-				}
-				else {
-					steer += SpaceshipData::Roll * deltaTime;
-					steer = std::min(steer, targetSteer);
-				}
-			}
+			Quaternion rotationalSpeed = { angularSpeedV3.x, angularSpeedV3.y, angularSpeedV3.z, 0.f };
+			Quaternion currentQuaternion = orientationComponent.Quaternion;
 
-			float turnAbility = cosf(steer) * SpaceshipData::Yaw;
-			if (steeringSign == steerSign) {
-				turnAbility += sinf(steer) * SpaceshipData::Pitch;
-			}
-			else {
-				turnAbility += sinf(steer) * 0.25f * SpaceshipData::NegativePitch;
-			}
-
-			steer *= steerSign;
-			turnAbility *= steeringSign;
-			steerComponent.Steer = steer;
-
-			Quaternion resultingQuaternion;
-			if (turn) {
-				Quaternion rollQuaternion = QuaternionFromAxisAngle(Forward3, -steer);
-
-				float dot = Vector3DotProduct(Forward3, forward);
-				Quaternion yawQuaternion;
-				if (FloatEquals(dot, -1.f))
-				{
-					yawQuaternion = yawQuaternion = QuaternionFromAxisAngle(Up3, PI);
-				}
-				else {
-					yawQuaternion = QuaternionFromVector3ToVector3(Forward3, forward);
-				}
-
-				Quaternion turningQuaternion = QuaternionFromAxisAngle(Up3, turnAbility * deltaTime);
-
-				resultingQuaternion = QuaternionMultiply(yawQuaternion, rollQuaternion);
-				resultingQuaternion = QuaternionMultiply(turningQuaternion, resultingQuaternion);
-			}
-			else {
-				Quaternion rollQuaternion = QuaternionFromAxisAngle(Forward3, -steer);
-
-				float dot = Vector3DotProduct(Forward3, inputDirection);
-				Quaternion yawQuaternion;
-				if (FloatEquals(dot, -1.f)) {
-					yawQuaternion = QuaternionFromAxisAngle(Up3, PI);
-				}
-				else {
-					yawQuaternion = QuaternionFromVector3ToVector3(Forward3, inputDirection);
-				}
-
-				resultingQuaternion = QuaternionMultiply(yawQuaternion, rollQuaternion);
-			}
-			orientationComponent.Quaternion = resultingQuaternion;
+			currentQuaternion = QuaternionAdd(currentQuaternion, QuaternionMultiply(rotationalSpeed, currentQuaternion));
+			orientationComponent.Quaternion = QuaternionNormalize(currentQuaternion);
 	};
 	playerView.each(playerProcess);
 
