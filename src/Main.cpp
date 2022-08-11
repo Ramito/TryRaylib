@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "rcamera.h"
+#include <random>
 
 static void SetupWindow()
 {
@@ -60,15 +61,9 @@ constexpr float Thrust = 15.f;
 constexpr float LinearDrag = 1e-5;
 constexpr float QuadraticDrag = 1e-3;
 
-constexpr float Yaw = 0.4f;
-constexpr float Pitch = 2.5f;
-constexpr float Roll = 1.5f;
-
-constexpr float NegativePitch = 1.25f;
-constexpr float NegativeRoll = 2.75f;
-
-constexpr float SteerB = 0.25f;
-constexpr float SteerM = 1.5f;
+constexpr float Yaw = 0.75f;
+constexpr float Pitch = 2.25f;
+constexpr float Roll = 1.25f;
 } // namespace SpaceshipData
 
 namespace WeaponData
@@ -120,10 +115,6 @@ struct ParticleComponent
 {
 	uint32_t LifeTime;
 };
-struct TerminalSimulationNodeComponent
-{ };
-struct SimulationNodeComponent
-{ };
 
 static void DrawSpaceShip(const Vector3& position, const Quaternion orientation, Color color)
 {
@@ -189,14 +180,6 @@ static void Draw(Camera& camera, entt::registry& registry)
 		DrawSpaceShip(position.Position, orientation.Quaternion, RED);
 	}
 
-	for(auto entity :
-		registry.view<PositionComponent, OrientationComponent, TerminalSimulationNodeComponent>())
-	{
-		auto& position = registry.get<PositionComponent>(entity);
-		auto& orientation = registry.get<OrientationComponent>(entity);
-		DrawSpaceShip(position.Position, orientation.Quaternion, YELLOW);
-	}
-
 	for(entt::entity particle : registry.view<ParticleComponent>())
 	{
 		const Vector3& position = registry.get<PositionComponent>(particle).Position;
@@ -240,13 +223,13 @@ void UpdateInput(const Camera& camera, std::array<GameInput, 4>& gameInputs)
 static entt::registry SetupSim()
 {
 	entt::registry registry;
-	registry.reserve(256000);
+	registry.reserve(2000);
 
 	entt::entity player = registry.create();
 	registry.emplace<SpaceshipControlComponent>(player, 0u, FlightStickState{0.f, 0.f, 0.f, 0.f});
 	registry.emplace<SteerComponent>(player, 0.f);
 	registry.emplace<ThrustComponent>(player, 0.f);
-	registry.emplace<PositionComponent>(player, 0.f, 2.f, 0.f);
+	registry.emplace<PositionComponent>(player, 0.f, 0.f, 0.f);
 	registry.emplace<VelocityComponent>(player, 0.f, 0.f, 0.f);
 	registry.emplace<OrientationComponent>(player, QuaternionIdentity());
 	registry.emplace<GunComponent>(player, 0.f, 0u);
@@ -319,105 +302,334 @@ static void SimulateSpaceship(float deltaTime,
 	positionComponent.Position = Vector3Add(positionComponent.Position, displacement);
 }
 
-template <typename TComponent>
-static TComponent&
-CloneComponent(entt::entity target, entt::entity source, entt::registry& registry)
+class ManeuverFinder
 {
-	return registry.emplace<TComponent>(target, registry.get<TComponent>(source));
-}
-
-std::vector<FlightStickState> states;
-
-static void CreateStepClone(float deltaTime,
-							entt::entity base,
-							entt::registry& registry,
-							const FlightStickState state)
-{
-	registry.remove<TerminalSimulationNodeComponent>(base);
-
-	entt::entity child = registry.create();
-	registry.emplace<SimulationNodeComponent>(child);
-	registry.emplace<TerminalSimulationNodeComponent>(child);
-
-	PositionComponent& positionComponent = CloneComponent<PositionComponent>(child, base, registry);
-	VelocityComponent& velocityComponent = CloneComponent<VelocityComponent>(child, base, registry);
-	OrientationComponent& orientationComponent =
-		CloneComponent<OrientationComponent>(child, base, registry);
-	SpaceshipControlComponent& controlComponent =
-		CloneComponent<SpaceshipControlComponent>(child, base, registry);
-
-	controlComponent.State = state;
-
-	SimulateSpaceship(deltaTime, positionComponent, velocityComponent, orientationComponent, state);
-	SimulateSpaceship(deltaTime, positionComponent, velocityComponent, orientationComponent, state);
-	SimulateSpaceship(deltaTime, positionComponent, velocityComponent, orientationComponent, state);
-}
-
-static void ExpandAllSimNodes(float deltaTime, entt::entity base, entt::registry& registry)
-{
-	states.clear();
-
-	const FlightStickState originalState = registry.get<SpaceshipControlComponent>(base).State;
-
-	constexpr float ControlSpeed = 0.5f;
-
-	for(int i = -1; i <= 1; ++i)
+public:
+	static inline void ExpandChildren(float deltaTime,
+									  entt::entity source,
+									  entt::registry& sourceRegistry,
+									  entt::registry& targetRegistry,
+									  Vector3 targetVelocity,
+									  std::vector<FlightStickState>& scratchpad)
 	{
-		FlightStickState iteratingState = originalState;
-		iteratingState.Roll = std::clamp(iteratingState.Roll + ControlSpeed * i, -1.f, 1.f);
-		for(int j = -1; j <= 1; ++j)
+		FlightStickState originalState;
+		if(const SpaceshipControlComponent* control =
+			   sourceRegistry.try_get<SpaceshipControlComponent>(source))
 		{
-			iteratingState.Pitch = std::clamp(iteratingState.Pitch + ControlSpeed * j, -1.f, 1.f);
-			for(int k = -1; k <= 1; ++k)
-			{
-				iteratingState.Yaw = std::clamp(iteratingState.Yaw + ControlSpeed * k, -1.f, 1.f);
-				for(int l = -1; l <= 1; ++l)
-				{
-					iteratingState.Thrust =
-						std::clamp(iteratingState.Thrust + ControlSpeed * l, 0.f, 1.f);
+			originalState = control->State;
+		}
+		else
+		{
+			originalState = sourceRegistry.get<FlightStickState>(source);
+		}
 
-					if(std::find(states.begin(), states.end(), iteratingState) != states.end())
+		NodeComponent* sourceNodeComponent = sourceRegistry.try_get<NodeComponent>(source);
+
+		ExpandStickStates(originalState, scratchpad);
+
+		for(const FlightStickState& state : scratchpad)
+		{
+			entt::entity internalEntity = targetRegistry.create();
+
+			if(sourceNodeComponent == nullptr)
+			{
+				targetRegistry.emplace<RootNodeComponent>(internalEntity);
+			}
+			else
+			{
+				sourceNodeComponent->ChildCount++;
+				targetRegistry.emplace<ChildLinkComponent>(internalEntity,
+														   sourceNodeComponent->FirstChild);
+				sourceNodeComponent->FirstChild = internalEntity;
+			}
+
+			targetRegistry.emplace<FlightStickState>(internalEntity, state);
+
+			PositionComponent& positionComponent = targetRegistry.emplace<PositionComponent>(
+				internalEntity, sourceRegistry.get<PositionComponent>(source));
+
+			VelocityComponent& velocityComponent = targetRegistry.emplace<VelocityComponent>(
+				internalEntity, sourceRegistry.get<VelocityComponent>(source));
+
+			OrientationComponent& orientationComponent =
+				targetRegistry.emplace<OrientationComponent>(
+					internalEntity, sourceRegistry.get<OrientationComponent>(source));
+
+			SimulateSpaceship(
+				deltaTime, positionComponent, velocityComponent, orientationComponent, state);
+
+			entt::entity parent = entt::null;
+			uint32_t timeSteps = 1u;
+			if(sourceNodeComponent != nullptr)
+			{
+				parent = source;
+				timeSteps += sourceNodeComponent->TimeSteps;
+			}
+
+			float nodeValue = Value(deltaTime * timeSteps,
+									velocityComponent.Velocity,
+									positionComponent.Position.y,
+									targetVelocity);
+
+			targetRegistry.emplace<NodeComponent>(
+				internalEntity, nodeValue, 1u, timeSteps, 0u, entt::null, parent);
+		}
+	}
+
+	FlightStickState FindNextControl(float deltaTime,
+									 entt::entity source,
+									 entt::registry& sourceRegistry,
+									 Vector3 targetVelocity)
+	{
+		internalRegistry.clear();
+
+		ExpandChildren(deltaTime,
+					   source,
+					   sourceRegistry,
+					   internalRegistry,
+					   targetVelocity,
+					   stickStateScratchpad);
+
+		Iterations = 1;
+
+		while(Iterations < 250)
+		{
+			IterateTree(deltaTime, targetVelocity);
+			++Iterations;
+		}
+
+		UpdateBestRootNode();
+
+		entt::entity bestNode = *internalRegistry.view<BestRootNodeComponent>().begin();
+
+		return internalRegistry.get<FlightStickState>(bestNode);
+	}
+
+	void UpdateBestRootNode()
+	{
+		internalRegistry.clear<BestRootNodeComponent>();
+
+		auto rootNodes = internalRegistry.view<NodeComponent, RootNodeComponent>();
+
+		float bestUtility = std::numeric_limits<float>::lowest();
+		entt::entity bestNode;
+
+		for(entt::entity node : rootNodes)
+		{
+			const NodeComponent& nodeComponent = internalRegistry.get<NodeComponent>(node);
+
+			float utility = Utility(nodeComponent.Value, nodeComponent.Iterations, Iterations);
+
+			if(utility > bestUtility)
+			{
+				bestUtility = utility;
+				bestNode = node;
+			}
+		}
+
+		internalRegistry.emplace<BestRootNodeComponent>(bestNode);
+	}
+
+	entt::entity GetBestLeafNode(entt::entity parent)
+	{
+		const NodeComponent& parentNodeComponent = internalRegistry.get<NodeComponent>(parent);
+		const uint32_t childCount = parentNodeComponent.ChildCount;
+		entt::entity iteratingChild = parentNodeComponent.FirstChild;
+
+		entt::entity bestChild;
+		float bestUtility = std::numeric_limits<float>::lowest();
+
+		for(uint32_t it = 0; it < childCount; ++it)
+		{
+			const NodeComponent& childNodeComponent =
+				internalRegistry.get<NodeComponent>(iteratingChild);
+			float utility = Utility(childNodeComponent.Value,
+									childNodeComponent.Iterations,
+									parentNodeComponent.Iterations);
+			if(utility > bestUtility)
+			{
+				bestUtility = utility;
+				bestChild = iteratingChild;
+			}
+
+			iteratingChild = internalRegistry.get<ChildLinkComponent>(iteratingChild).NextChild;
+		}
+
+		return bestChild;
+	}
+
+	std::default_random_engine randomGenerator; // WIP WIP WIP
+	void IterateTree(float deltaTime, const Vector3& targetVelocity)
+	{
+		UpdateBestRootNode();
+		entt::entity bestNode = *internalRegistry.view<BestRootNodeComponent>().begin();
+
+		const NodeComponent* bestNodeComponent = &internalRegistry.get<NodeComponent>(bestNode);
+		while(bestNodeComponent->ChildCount > 0)
+		{
+			const uint32_t childCount = bestNodeComponent->ChildCount;
+			entt::entity iteratingChild = bestNodeComponent->FirstChild;
+
+			float bestUtility = std::numeric_limits<float>::lowest();
+
+			for(uint32_t childIt = 0; childIt < childCount; ++childIt)
+			{
+				const NodeComponent& childNodeComponent =
+					internalRegistry.get<NodeComponent>(iteratingChild);
+				float utility = Utility(childNodeComponent.Value,
+										childNodeComponent.Iterations,
+										bestNodeComponent->Iterations);
+				if(utility > bestUtility)
+				{
+					bestUtility = utility;
+					bestNode = iteratingChild;
+				}
+
+				iteratingChild = internalRegistry.get<ChildLinkComponent>(iteratingChild).NextChild;
+			}
+			bestNodeComponent = &internalRegistry.get<NodeComponent>(bestNode);
+		}
+
+		ExpandChildren(deltaTime,
+					   bestNode,
+					   internalRegistry,
+					   internalRegistry,
+					   targetVelocity,
+					   stickStateScratchpad);
+
+		entt::entity bestLeaf = GetBestLeafNode(bestNode);
+
+		uint32_t timeSteps = internalRegistry.get<NodeComponent>(bestLeaf).TimeSteps;
+
+		entt::entity simulated = internalRegistry.create();
+
+		FlightStickState& stickState = internalRegistry.emplace<FlightStickState>(
+			simulated, internalRegistry.get<FlightStickState>(bestLeaf));
+
+		PositionComponent& positionComponent = internalRegistry.emplace<PositionComponent>(
+			simulated, internalRegistry.get<PositionComponent>(bestLeaf));
+
+		VelocityComponent& velocityComponent = internalRegistry.emplace<VelocityComponent>(
+			simulated, internalRegistry.get<VelocityComponent>(bestLeaf));
+
+		OrientationComponent& orientationComponent = internalRegistry.emplace<OrientationComponent>(
+			simulated, internalRegistry.get<OrientationComponent>(bestLeaf));
+
+		float simulatedValue = std::numeric_limits<float>::lowest();
+		uint32_t iterations = 30;
+		while(iterations-- > 0)
+		{
+			ExpandStickStates(internalRegistry.get<FlightStickState>(simulated),
+							  stickStateScratchpad);
+			std::uniform_int_distribution<int> distribution(0, stickStateScratchpad.size() - 1);
+			int randomIndex = distribution(randomGenerator);
+
+			stickState = stickStateScratchpad[randomIndex];
+
+			SimulateSpaceship(
+				deltaTime, positionComponent, velocityComponent, orientationComponent, stickState);
+
+			timeSteps += 1;
+			simulatedValue = std::max(simulatedValue,
+									  Value(deltaTime * timeSteps,
+											velocityComponent.Velocity,
+											positionComponent.Position.y,
+											targetVelocity));
+		}
+
+		internalRegistry.destroy(simulated);
+
+		// Back propagate
+		entt::entity parent = bestLeaf;
+
+		while(internalRegistry.valid(parent))
+		{
+			NodeComponent* parentNodeComponent = &internalRegistry.get<NodeComponent>(parent);
+			parentNodeComponent->Iterations += 1;
+			parentNodeComponent->Value += simulatedValue;
+			parent = parentNodeComponent->Parent;
+		}
+	}
+
+	static float Utility(float nodeValue, uint32_t nodeIterations, uint32_t parentIterations)
+	{
+		float utility = nodeValue / nodeIterations;
+		utility += 2.f * sqrtf(log(static_cast<float>(parentIterations)) / nodeIterations);
+		return utility;
+	}
+
+	static float
+	Value(float totalTime, const Vector3& velocity, float yPosition, const Vector3& targetVelocity)
+	{
+		float value = totalTime * totalTime;
+		value += 0.5 * Vector3DistanceSqr(velocity, targetVelocity);
+		value += (yPosition * yPosition);
+		return -value;
+	}
+
+	static void ExpandStickStates(const FlightStickState& fromState,
+								  std::vector<FlightStickState>& expanded)
+	{
+		expanded.clear();
+
+		constexpr float ControlSpeed = 0.5f;
+
+		for(int i = -1; i <= 1; ++i)
+		{
+			FlightStickState iteratingState = fromState;
+			iteratingState.Roll = std::clamp(iteratingState.Roll + ControlSpeed * i, -1.f, 1.f);
+			for(int j = -1; j <= 1; ++j)
+			{
+				iteratingState.Pitch =
+					std::clamp(iteratingState.Pitch + ControlSpeed * j, -1.f, 1.f);
+				for(int k = -1; k <= 1; ++k)
+				{
+					iteratingState.Yaw =
+						std::clamp(iteratingState.Yaw + ControlSpeed * k, -1.f, 1.f);
+					for(int l = -1; l <= 1; ++l)
 					{
-						continue;
+						iteratingState.Thrust =
+							std::clamp(iteratingState.Thrust + ControlSpeed * l, 0.f, 1.f);
+
+						if(std::find(expanded.begin(), expanded.end(), iteratingState) !=
+						   expanded.end())
+						{
+							continue;
+						}
+						expanded.push_back(iteratingState);
 					}
-					states.push_back(iteratingState);
 				}
 			}
 		}
 	}
 
-	for(const auto& state : states)
+private:
+	struct RootNodeComponent
+	{ };
+	struct BestRootNodeComponent
+	{ };
+	struct NodeComponent
 	{
-		CreateStepClone(deltaTime, base, registry, state);
-	}
-}
+		float Value = 0.f;
+		uint32_t Iterations = 0;
+		uint32_t TimeSteps = 0;
+		uint32_t ChildCount = 0;
+		entt::entity FirstChild;
+		entt::entity Parent;
+	};
+	struct ChildLinkComponent
+	{
+		entt::entity NextChild;
+	};
 
-static void ExpandRandomSimNode(float deltaTime, entt::entity base, entt::registry& registry)
-{
-	const FlightStickState originalState = registry.get<SpaceshipControlComponent>(base).State;
+	std::vector<FlightStickState> stickStateScratchpad;
+	entt::registry internalRegistry;
+	uint32_t Iterations = 0;
+};
 
-	constexpr float ControlSpeed = 0.5f;
-
-	int i = GetRandomValue(-1, 1);
-	int j = GetRandomValue(-1, 1);
-	int k = GetRandomValue(-1, 1);
-	int l = GetRandomValue(-1, 1);
-
-	FlightStickState state;
-	state.Roll = std::clamp(originalState.Roll + ControlSpeed * i, -1.f, 1.f);
-	state.Pitch = std::clamp(originalState.Pitch + ControlSpeed * j, -1.f, 1.f);
-	state.Yaw = std::clamp(originalState.Yaw + ControlSpeed * k, -1.f, 1.f);
-	state.Thrust = std::clamp(originalState.Thrust + ControlSpeed * l, 0.f, 1.f);
-
-	CreateStepClone(deltaTime, base, registry, state);
-}
-
-static void Simulate(entt::registry& registry)
+static void Simulate(entt::registry& registry, ManeuverFinder& finder)
 {
 	constexpr float deltaTime = SimTimeData::DeltaTime;
-
-	auto simulated = registry.view<SimulationNodeComponent>();
-	registry.destroy(simulated.begin(), simulated.end());
 
 	auto playerView = registry.view<PositionComponent,
 									VelocityComponent,
@@ -425,39 +637,26 @@ static void Simulate(entt::registry& registry)
 									SteerComponent,
 									SpaceshipControlComponent,
 									ThrustComponent>();
-	auto playerProcess = [deltaTime, &registry](entt::entity entity,
-												PositionComponent& positionComponent,
-												VelocityComponent& velocityComponent,
-												OrientationComponent& orientationComponent,
-												SteerComponent& steerComponent,
-												const SpaceshipControlComponent& inputComponent,
-												ThrustComponent& thrustComponent) {
-		const FlightStickState& state = inputComponent.State;
+	auto playerProcess = [deltaTime, &registry, &finder](
+							 entt::entity entity,
+							 PositionComponent& positionComponent,
+							 VelocityComponent& velocityComponent,
+							 OrientationComponent& orientationComponent,
+							 SteerComponent& steerComponent,
+							 const SpaceshipControlComponent& inputComponent,
+							 ThrustComponent& thrustComponent) {
+		//const FlightStickState& state = inputComponent.State;
+
+		const FlightStickState& state =
+			finder.FindNextControl(deltaTime, entity, registry, {0.f, 0.f, -20.f});
 
 		SimulateSpaceship(
 			deltaTime, positionComponent, velocityComponent, orientationComponent, state);
-
-		ExpandRandomSimNode(deltaTime, entity, registry);
 
 		thrustComponent.Thrust = SpaceshipData::MinThrust + state.Thrust * SpaceshipData::Thrust;
 		;
 	};
 	playerView.each(playerProcess);
-
-	size_t count = 3;
-	while(count-- != 0)
-	{
-		std::vector<entt::entity> nodes;
-		nodes.reserve(registry.storage<TerminalSimulationNodeComponent>().size());
-		for(entt::entity node : registry.view<TerminalSimulationNodeComponent>())
-		{
-			nodes.emplace_back(node);
-		}
-		for(entt::entity node : nodes)
-		{
-			ExpandRandomSimNode(deltaTime, node, registry);
-		}
-	}
 
 	auto shootView = registry.view<PositionComponent,
 								   VelocityComponent,
@@ -578,13 +777,14 @@ void main()
 	double gameStartTime = GetTime();
 	uint32_t simTicks = 0;
 	std::array<GameInput, 4> gameInput;
+	ManeuverFinder finder;
 	while(!WindowShouldClose())
 	{
 		UpdateInput(camera, gameInput);
 		ProcessInput(registry, gameInput);
 		while(gameStartTime + SimTimeData::DeltaTime * simTicks < GetTime())
 		{
-			Simulate(registry);
+			Simulate(registry, finder);
 			simTicks += 1;
 		}
 		Draw(camera, registry);
