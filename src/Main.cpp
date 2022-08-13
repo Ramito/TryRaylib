@@ -29,9 +29,23 @@ constexpr Vector3 Back3 = {0.f, 0.f, -1.f};
 constexpr Vector3 Left3 = {1.f, 0.f, 0.f};
 constexpr Vector3 Up3 = {0.f, 1.f, 0.f};
 
+constexpr Vector2 Forward2 = {0.f, 1.f};
+constexpr Vector2 Back2 = {0.f, -1.f};
+constexpr Vector2 Left2 = {1.f, 0.f};
+
+static inline Vector2 Flatten(const Vector3& vector)
+{
+	return {vector.x, vector.z};
+}
+
+static inline Vector3 Unflatten(const Vector2& vector, float height = 0.f)
+{
+	return {vector.x, height, vector.y};
+}
+
 struct GameInput
 {
-	Vector3 Direction = Forward3;
+	Vector2 Direction = Forward2;
 	float Thrust = 0.f;
 	bool Fire = false;
 };
@@ -54,14 +68,14 @@ constexpr float DeltaTime = 1.f / TargetFPS;
 
 namespace SpaceshipData
 {
-constexpr float MinThrust = 10.f;
-constexpr float Thrust = 15.f;
+constexpr float MinThrust = 5.f;
+constexpr float Thrust = 16.f;
 constexpr float LinearDrag = 1e-5;
 constexpr float QuadraticDrag = 1e-3;
 
-constexpr float Yaw = 0.75f;
-constexpr float Pitch = 2.25f;
-constexpr float Roll = 1.25f;
+constexpr float Yaw = 1.25f;
+constexpr float Pitch = 3.5f;
+constexpr float Roll = 2.25f;
 } // namespace SpaceshipData
 
 namespace WeaponData
@@ -181,11 +195,11 @@ static void Draw(Camera& camera, entt::registry& registry)
 		DrawSpaceShip(position, orientation.Quaternion, RED);
 		if(const auto* playerInput = registry.try_get<PlayerControlComponent>(entity))
 		{
-			auto endpoint = Vector3Add(position, Vector3Scale(playerInput->Input.Direction, 10.f));
+			const Vector3 spaceDirection = Unflatten(playerInput->Input.Direction);
+			auto endpoint = Vector3Add(position, Vector3Scale(spaceDirection, 10.f));
 			DrawLine3D(position, endpoint, YELLOW);
-			endpoint = Vector3Add(
-				position,
-				Vector3Scale(playerInput->Input.Direction, playerInput->Input.Thrust * 10.f));
+			endpoint = Vector3Add(position,
+								  Vector3Scale(spaceDirection, playerInput->Input.Thrust * 10.f));
 			DrawLine3D(position, endpoint, WHITE);
 		}
 	}
@@ -232,7 +246,6 @@ void UpdateInput(const Camera& camera, std::array<GameInput, 4>& gameInputs)
 			}
 
 			gameInput.Direction = {Vector2DotProduct(stick, normalizedOrthogonal),
-								   0.f,
 								   Vector2DotProduct(stick, normalizedTo)};
 
 			gameInput.Thrust = std::min(stickLength, 1.f);
@@ -324,8 +337,8 @@ static void SimulateSpaceship(float deltaTime,
 class ManeuverFinder
 {
 public:
-	constexpr static uint32_t TreeIterations = 125;
-	constexpr static uint32_t DepthIterations = 60;
+	constexpr static uint32_t TreeIterations = 195;
+	constexpr static uint32_t DepthIterations = 40;
 
 	static inline void ExpandChildren(float deltaTime,
 									  entt::entity source,
@@ -445,7 +458,7 @@ public:
 			}
 			else
 			{
-				utility = nodeComponent.Value / nodeComponent.Iterations;
+				utility = nodeComponent.Value;
 			}
 
 			if(utility > bestUtility)
@@ -572,15 +585,15 @@ public:
 		{
 			NodeComponent* parentNodeComponent = &internalRegistry.get<NodeComponent>(parent);
 			parentNodeComponent->Iterations += 1;
-			parentNodeComponent->Value += simulatedValue;
+			parentNodeComponent->Value = std::max(parentNodeComponent->Value, simulatedValue);
 			parent = parentNodeComponent->Parent;
 		}
 	}
 
 	static float Utility(float nodeValue, uint32_t nodeIterations, uint32_t parentIterations)
 	{
-		float utility = nodeValue / nodeIterations;
-		utility += 2.f * sqrtf(log(static_cast<float>(parentIterations)) / nodeIterations);
+		float utility = nodeValue;
+		utility += sqrtf(2.f * log(static_cast<float>(parentIterations)) / nodeIterations);
 		return utility;
 	}
 
@@ -590,11 +603,19 @@ public:
 					   const Vector3& up,
 					   const GameInput& input)
 	{
-		float directionDistance =
-			-22.0f * Vector3DistanceSqr(Vector3Normalize(velocity), input.Direction);
-		float verticalDistance = -0.25f * abs(yPosition);
-		float verticalAlignment = -0.2f * (1.f - Vector3DotProduct(Up3, up));
-		return std::min({directionDistance, verticalDistance, verticalAlignment});
+		float signY = (yPosition >= 0.f) ? 1.f : -1.f;
+		yPosition *= 0.25f;
+		float verticalValue = signY * yPosition * yPosition / (1.f + yPosition * yPosition);
+		Vector3 normalizedVelocity = Vector3Normalize(velocity);
+		float directionValue =
+			1.f + Vector3DotProduct(normalizedVelocity,
+									Vector3Normalize(Unflatten(input.Direction, -verticalValue)));
+		if(directionValue > 1.95f)
+		{
+			directionValue += 0.05f * (1.f + Vector3DotProduct(Up3, up));
+		}
+
+		return 0.5f * directionValue;
 	}
 
 	static void ExpandStickStates(const FlightStickState& fromState,
@@ -602,7 +623,10 @@ public:
 	{
 		expanded.clear();
 
-		constexpr float ControlSpeed = 0.2f;
+		constexpr float RollControlSpeed = 0.25f;
+		constexpr float PitchControlSpeed = 0.2f;
+		constexpr float YawControlSpeed = 0.5f;
+		constexpr float ThrustControlSpeed = 1.f;
 
 		float prevRoll = std::numeric_limits<float>::quiet_NaN();
 		float prevPitch = std::numeric_limits<float>::quiet_NaN();
@@ -611,7 +635,7 @@ public:
 
 		for(int i = -1; i <= 1; ++i)
 		{
-			float roll = std::clamp(fromState.Roll + ControlSpeed * i, -1.f, 1.f);
+			float roll = std::clamp(fromState.Roll + RollControlSpeed * i, -1.f, 1.f);
 			if(roll == prevRoll)
 			{
 				continue;
@@ -620,7 +644,7 @@ public:
 
 			for(int j = -1; j <= 1; ++j)
 			{
-				float pitch = std::clamp(fromState.Pitch + ControlSpeed * j, -1.f, 1.f);
+				float pitch = std::clamp(fromState.Pitch + PitchControlSpeed * j, -1.f, 1.f);
 				if(pitch == prevPitch)
 				{
 					continue;
@@ -629,7 +653,7 @@ public:
 
 				for(int k = -1; k <= 1; ++k)
 				{
-					float yaw = std::clamp(fromState.Yaw + ControlSpeed * k, -1.f, 1.f);
+					float yaw = std::clamp(fromState.Yaw + YawControlSpeed * k, -1.f, 1.f);
 					if(yaw == prevYaw)
 					{
 						continue;
@@ -638,7 +662,8 @@ public:
 
 					for(int l = -1; l <= 1; ++l)
 					{
-						float thrust = std::clamp(fromState.Thrust + ControlSpeed * l, -1.f, 1.f);
+						float thrust =
+							std::clamp(fromState.Thrust + ThrustControlSpeed * l, -0.f, 1.f);
 						if(thrust == prevThrust)
 						{
 							continue;
