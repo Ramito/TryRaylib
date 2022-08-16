@@ -68,14 +68,15 @@ constexpr float DeltaTime = 1.f / TargetFPS;
 
 namespace SpaceshipData
 {
-constexpr float MinThrust = 5.f;
-constexpr float Thrust = 16.f;
+constexpr float MinThrust = 2.5f;
+constexpr float Thrust = 15.f;
 constexpr float LinearDrag = 1e-5;
 constexpr float QuadraticDrag = 1e-3;
 
-constexpr float Yaw = 1.25f;
-constexpr float Pitch = 3.5f;
-constexpr float Roll = 2.25f;
+constexpr float Yaw = 0.25f;
+constexpr float Pitch = 0.9f;
+constexpr float NegativePitch = 0.25f;
+constexpr float Roll = 1.2f;
 } // namespace SpaceshipData
 
 namespace WeaponData
@@ -135,33 +136,22 @@ static void DrawSpaceShip(const Vector3& position, const Quaternion orientation,
 {
 	constexpr float Angle = -2.f * PI / 3.f;
 	constexpr float Length = 1.25f;
-	constexpr float Width = 0.65f;
-	constexpr float Height = 0.25f;
+	constexpr float Width = 0.85f;
+	constexpr float Height = 0.65f;
 
 	Vector3 forward = Vector3RotateByQuaternion(Forward3, orientation);
 	Vector3 left = Vector3RotateByQuaternion(Left3, orientation);
 	Vector3 up = Vector3RotateByQuaternion(Up3, orientation);
-
-	Vector3 upShift = Vector3Scale(up, Height);
-	Vector3 downShift = Vector3Scale(up, -2.f * Height);
 
 	Quaternion triangleQuat = QuaternionFromAxisAngle(up, Angle);
 
 	Vector3 vertex1 = Vector3Add(Vector3Scale(forward, Length), position);
 
 	Vector3 relVertex = Vector3RotateByQuaternion(forward, triangleQuat);
-	Vector3 vertex2 = Vector3Add(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
+	Vector3 vertex2 = Vector3Add(Vector3Scale(relVertex, Width), position);
 
 	relVertex = Vector3RotateByQuaternion(relVertex, triangleQuat);
-	Vector3 vertex3 =
-		Vector3Subtract(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
-
-	DrawLine3D(vertex1, vertex2, color);
-	DrawLine3D(vertex2, vertex3, color);
-	DrawLine3D(vertex3, vertex1, color);
-
-	vertex2 = Vector3Add(vertex2, downShift);
-	vertex3 = Vector3Subtract(vertex3, downShift);
+	Vector3 vertex3 = Vector3Add(Vector3Scale(relVertex, Width), position);
 
 	DrawLine3D(vertex1, vertex2, color);
 	DrawLine3D(vertex2, vertex3, color);
@@ -169,6 +159,11 @@ static void DrawSpaceShip(const Vector3& position, const Quaternion orientation,
 
 	Vector3 midBack = Vector3Lerp(vertex2, vertex3, 0.5f);
 	DrawLine3D(vertex1, midBack, color);
+
+	Vector3 tail = Vector3Add(midBack, Vector3Scale(up, Height));
+
+	DrawLine3D(midBack, tail, color);
+	DrawLine3D(vertex1, tail, color);
 }
 
 static void Draw(Camera& camera, entt::registry& registry)
@@ -300,7 +295,10 @@ static void SimulateSpaceship(float deltaTime,
 
 	Vector3 rollV3 = Vector3Scale(forward, control.Roll * SpaceshipData::Roll);
 	Vector3 yawV3 = Vector3Scale(up, -control.Yaw * SpaceshipData::Yaw);
-	Vector3 pitchV3 = Vector3Scale(left, control.Pitch * SpaceshipData::Pitch);
+	Vector3 pitchV3 =
+		Vector3Scale(left,
+					 control.Pitch * (control.Pitch <= 0.f ? SpaceshipData::Pitch
+														   : SpaceshipData::NegativePitch));
 
 	Vector3 angularSpeedV3 = Vector3Add(Vector3Add(rollV3, yawV3), pitchV3);
 	// Scale to apply as quaternion rotation
@@ -337,8 +335,8 @@ static void SimulateSpaceship(float deltaTime,
 class ManeuverFinder
 {
 public:
-	constexpr static uint32_t TreeIterations = 195;
-	constexpr static uint32_t DepthIterations = 40;
+	constexpr static uint32_t TreeIterations = 220;
+	constexpr static uint32_t DepthIterations = 46;
 
 	static inline void ExpandChildren(float deltaTime,
 									  entt::entity source,
@@ -394,21 +392,21 @@ public:
 				deltaTime, positionComponent, velocityComponent, orientationComponent, state);
 
 			entt::entity parent = entt::null;
-			uint32_t timeSteps = 1u;
+			uint32_t depth = 1u;
 			if(sourceNodeComponent != nullptr)
 			{
 				parent = source;
-				timeSteps += sourceNodeComponent->TimeSteps;
+				depth += sourceNodeComponent->Depth;
 			}
 
-			float nodeValue = Value(deltaTime * timeSteps,
+			float nodeValue = Value(deltaTime * depth,
 									velocityComponent.Velocity,
 									positionComponent.Position.y,
 									Vector3RotateByQuaternion(Up3, orientationComponent.Quaternion),
 									input);
 
 			targetRegistry.emplace<NodeComponent>(
-				internalEntity, nodeValue, 1u, timeSteps, 0u, entt::null, parent);
+				internalEntity, nodeValue, 1u, depth, 0u, entt::null, parent);
 		}
 	}
 
@@ -536,7 +534,7 @@ public:
 
 		entt::entity bestLeaf = GetBestLeafNode(bestNode);
 
-		uint32_t timeSteps = internalRegistry.get<NodeComponent>(bestLeaf).TimeSteps;
+		uint32_t depth = internalRegistry.get<NodeComponent>(bestLeaf).Depth;
 
 		entt::entity simulated = internalRegistry.create();
 
@@ -566,10 +564,10 @@ public:
 			SimulateSpaceship(
 				deltaTime, positionComponent, velocityComponent, orientationComponent, stickState);
 
-			timeSteps += 1;
+			depth += 1;
 			simulatedValue =
 				std::max(simulatedValue,
-						 Value(deltaTime * timeSteps,
+						 Value(deltaTime * depth,
 							   velocityComponent.Velocity,
 							   positionComponent.Position.y,
 							   Vector3RotateByQuaternion(Up3, orientationComponent.Quaternion),
@@ -603,19 +601,26 @@ public:
 					   const Vector3& up,
 					   const GameInput& input)
 	{
-		float signY = (yPosition >= 0.f) ? 1.f : -1.f;
-		yPosition *= 0.25f;
-		float verticalValue = signY * yPosition * yPosition / (1.f + yPosition * yPosition);
-		Vector3 normalizedVelocity = Vector3Normalize(velocity);
-		float directionValue =
-			1.f + Vector3DotProduct(normalizedVelocity,
-									Vector3Normalize(Unflatten(input.Direction, -verticalValue)));
-		if(directionValue > 1.95f)
-		{
-			directionValue += 0.05f * (1.f + Vector3DotProduct(Up3, up));
-		}
+		// Output value should be normalize 0 - 1, where 0 is bad and 1 is good!
 
-		return 0.5f * directionValue;
+		float heightValue = 1.f / (1.f + yPosition * yPosition);
+
+		Vector2 normalizedVelocity = Flatten(Vector3Normalize(velocity));
+		float directionValue =
+			0.5f * (1.f + Vector2DotProduct(normalizedVelocity, input.Direction));
+
+		float verticalValue = 0.5f * (1.f + Vector3DotProduct(Up3, up));
+
+		float expVal = exp(-0.001 * totalTime);
+
+		constexpr float HeightWeight = 0.2f;
+		constexpr float DirectionWeight = 1.f;
+		constexpr float VerticalWeight = 0.1f;
+
+		return expVal *
+			   (HeightWeight * heightValue + DirectionWeight * directionValue +
+				VerticalWeight * verticalValue) /
+			   (HeightWeight + DirectionWeight + VerticalWeight);
 	}
 
 	static void ExpandStickStates(const FlightStickState& fromState,
@@ -624,9 +629,9 @@ public:
 		expanded.clear();
 
 		constexpr float RollControlSpeed = 0.25f;
-		constexpr float PitchControlSpeed = 0.2f;
-		constexpr float YawControlSpeed = 0.5f;
-		constexpr float ThrustControlSpeed = 1.f;
+		constexpr float PitchControlSpeed = 0.25f;
+		constexpr float YawControlSpeed = 0.25f;
+		constexpr float ThrustControlSpeed = 0.5f;
 
 		float prevRoll = std::numeric_limits<float>::quiet_NaN();
 		float prevPitch = std::numeric_limits<float>::quiet_NaN();
@@ -686,7 +691,7 @@ private:
 	{
 		float Value = 0.f;
 		uint32_t Iterations = 0;
-		uint32_t TimeSteps = 0;
+		uint32_t Depth = 0;
 		uint32_t ChildCount = 0;
 		entt::entity FirstChild;
 		entt::entity Parent;
@@ -721,6 +726,8 @@ static void Simulate(entt::registry& registry, ManeuverFinder& finder)
 							 ThrustComponent& thrustComponent) {
 		const FlightStickState& state =
 			finder.FindNextControl(deltaTime, entity, registry, controlComponent.Input);
+
+		registry.get_or_emplace<SpaceshipControlComponent>(entity).State = state;
 
 		SimulateSpaceship(
 			deltaTime, positionComponent, velocityComponent, orientationComponent, state);
