@@ -1,3 +1,4 @@
+#include "ThreadPool/ThreadPool.h"
 #include "entt/entt.hpp"
 #include "raylib.h"
 #include "raymath.h"
@@ -62,7 +63,7 @@ struct FlightStickState
 
 namespace SimTimeData
 {
-constexpr uint32_t TargetFPS = 60;
+constexpr uint32_t TargetFPS = 30;
 constexpr float DeltaTime = 1.f / TargetFPS;
 } // namespace SimTimeData
 
@@ -335,8 +336,8 @@ static void SimulateSpaceship(float deltaTime,
 class ManeuverFinder
 {
 public:
-	constexpr static uint32_t TreeIterations = 200;
-	constexpr static uint32_t DepthIterations = 60;
+	constexpr static uint32_t TreeIterations = 350;
+	constexpr static uint32_t DepthIterations = 50;
 
 	static inline void ExpandChildren(float deltaTime,
 									  entt::entity source,
@@ -552,8 +553,15 @@ public:
 
 		float simulatedValue = std::numeric_limits<float>::lowest();
 		uint32_t iterations = 0;
-		while(iterations++ < DepthIterations)
+
+		float maxExpectedValue = Exp(deltaTime * depth);
+		float maxExpectedValueDecay = Exp(deltaTime);
+
+		while(iterations++ < DepthIterations && simulatedValue < maxExpectedValue)
 		{
+			depth += 1;
+			maxExpectedValue *= maxExpectedValueDecay;
+
 			ExpandStickStates(internalRegistry.get<FlightStickState>(simulated),
 							  stickStateScratchpad);
 			std::uniform_int_distribution<int> distribution(0, stickStateScratchpad.size() - 1);
@@ -564,10 +572,10 @@ public:
 			SimulateSpaceship(
 				deltaTime, positionComponent, velocityComponent, orientationComponent, stickState);
 
-			depth += 1;
+			float totalTime = deltaTime * depth;
 			simulatedValue =
 				std::max(simulatedValue,
-						 Value(deltaTime * depth,
+						 Value(totalTime,
 							   velocityComponent.Velocity,
 							   positionComponent.Position.y,
 							   Vector3RotateByQuaternion(Up3, orientationComponent.Quaternion),
@@ -595,6 +603,11 @@ public:
 		return utility;
 	}
 
+	static inline float Exp(float totalTime)
+	{
+		return exp(-0.05 * totalTime);
+	}
+
 	static float Value(float totalTime,
 					   const Vector3& velocity,
 					   float yPosition,
@@ -611,13 +624,11 @@ public:
 
 		float verticalValue = 0.5f * (1.f + Vector3DotProduct(Up3, up));
 
-		float expVal = exp(-0.001 * totalTime);
-
 		constexpr float HeightWeight = 0.2f;
 		constexpr float DirectionWeight = 1.f;
 		constexpr float VerticalWeight = 0.1f;
 
-		return expVal *
+		return Exp(totalTime) *
 			   (HeightWeight * heightValue + DirectionWeight * directionValue +
 				VerticalWeight * verticalValue) /
 			   (HeightWeight + DirectionWeight + VerticalWeight);
@@ -682,6 +693,38 @@ public:
 		}
 	}
 
+	FlightStickState ThreadedState;
+	float DeltaTime;
+	entt::entity Source;
+	entt::registry* Registry;
+	GameInput Input;
+	FlightStickState FindThreadedState(float deltaTime,
+									   entt::entity source,
+									   entt::registry& sourceRegistry,
+									   const GameInput& input)
+	{
+		static bool init = false;
+		if(!init)
+		{
+			threadPool = std::make_unique<ThreadPool>(1);
+			controlTask = [&]() {
+				ThreadedState = FindNextControl(DeltaTime, Source, *Registry, Input);
+			};
+			init = true;
+		}
+
+		threadPool->JoinTasks();
+		FlightStickState previous = ThreadedState;
+
+		DeltaTime = deltaTime;
+		Source = source;
+		Registry = &sourceRegistry;
+		Input = input;
+
+		threadPool->PushTask(controlTask);
+		return previous;
+	}
+
 private:
 	struct RootNodeComponent
 	{ };
@@ -700,6 +743,9 @@ private:
 	{
 		entt::entity NextChild;
 	};
+
+	std::unique_ptr<ThreadPool> threadPool;
+	Task controlTask;
 
 	std::vector<FlightStickState> stickStateScratchpad;
 	entt::registry internalRegistry;
@@ -725,7 +771,7 @@ static void Simulate(entt::registry& registry, ManeuverFinder& finder)
 							 const PlayerControlComponent& controlComponent,
 							 ThrustComponent& thrustComponent) {
 		const FlightStickState& state =
-			finder.FindNextControl(3.f * deltaTime, entity, registry, controlComponent.Input);
+			finder.FindThreadedState(4.f * deltaTime, entity, registry, controlComponent.Input);
 
 		registry.get_or_emplace<SpaceshipControlComponent>(entity).State = state;
 
@@ -857,14 +903,29 @@ void main()
 	uint32_t simTicks = 0;
 	std::array<GameInput, 4> gameInput;
 	ManeuverFinder finder;
+	int simulateTicks = 1;
 	while(!WindowShouldClose())
 	{
 		UpdateInput(camera, gameInput);
 		ProcessInput(registry, gameInput);
-		while(gameStartTime + SimTimeData::DeltaTime * simTicks < GetTime())
+		double currentTime = GetTime();
+		double simmulatedTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
+		if(simmulatedTime < currentTime)
 		{
-			Simulate(registry, finder);
-			simTicks += 1;
+			int counter = simulateTicks;
+			while(counter-- > 0)
+			{
+				Simulate(registry, finder);
+				simTicks += 1;
+			}
+			if(simmulatedTime + SimTimeData::DeltaTime < currentTime)
+			{
+				simulateTicks += 1;
+			}
+		}
+		else
+		{
+			simulateTicks = 1;
 		}
 		Draw(camera, registry);
 	}
