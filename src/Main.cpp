@@ -335,8 +335,8 @@ static void SimulateSpaceship(float deltaTime,
 class ManeuverFinder
 {
 public:
-	constexpr static uint32_t TreeIterations = 220;
-	constexpr static uint32_t DepthIterations = 46;
+	constexpr static uint32_t TreeIterations = 200;
+	constexpr static uint32_t DepthIterations = 60;
 
 	static inline void ExpandChildren(float deltaTime,
 									  entt::entity source,
@@ -725,7 +725,7 @@ static void Simulate(entt::registry& registry, ManeuverFinder& finder)
 							 const PlayerControlComponent& controlComponent,
 							 ThrustComponent& thrustComponent) {
 		const FlightStickState& state =
-			finder.FindNextControl(deltaTime, entity, registry, controlComponent.Input);
+			finder.FindNextControl(3.f * deltaTime, entity, registry, controlComponent.Input);
 
 		registry.get_or_emplace<SpaceshipControlComponent>(entity).State = state;
 
