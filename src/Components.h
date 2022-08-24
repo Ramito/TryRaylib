@@ -33,6 +33,10 @@ struct SpaceshipInputComponent {
 	GameInput Input;
 };
 
+struct AsteroidComponent {
+	float Radius;
+};
+
 struct ParticleComponent {
 	uint32_t LifeTime;
 };

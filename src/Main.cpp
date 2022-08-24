@@ -8,8 +8,8 @@
 #include "Simulation/Simulation.h"
 
 static void SetupWindow() {
-	SetTargetFPS(120);
-	InitWindow(2400, 1500, "Game");
+	SetTargetFPS(SimTimeData::TargetFPS);
+	InitWindow(1600, 1200, "Game");
 }
 
 
@@ -22,7 +22,7 @@ static Camera SetupCamera() {
 	camera.target = { 0.f, 0.f, 0.f };
 	camera.projection = CAMERA_PERSPECTIVE;
 	camera.up = { 0.f, 1.f, 0.f };
-	camera.fovy = 72.f;
+	camera.fovy = 70.f;
 	SetCameraMode(camera, CAMERA_CUSTOM);
 	return camera;
 }
@@ -83,18 +83,78 @@ static void Draw(Camera& camera, entt::registry& registry) {
 		DrawSpaceShip(position.Position, orientation.Quaternion);
 	}
 
-	for (entt::entity particle : registry.view<ParticleComponent>()) {
-		const Vector3& position = registry.get<PositionComponent>(particle).Position;
-		if (!registry.any_of<OrientationComponent>(particle))
-		{
-			DrawPoint3D(position, ORANGE);
+	const float screenW = GetScreenWidth();
+	const float screenH = GetScreenHeight();
+
+	Ray minMinRay = GetMouseRay(Vector2{ 0.f, 0.f }, camera);
+	Ray minMaxRay = GetMouseRay(Vector2{ 0.f, screenH }, camera);
+	Ray maxMaxRay = GetMouseRay(Vector2{ screenW, screenH }, camera);
+	Ray maxMinRay = GetMouseRay(Vector2{ screenW, 0.f }, camera);
+
+	Vector3 anchor = camera.position;
+	Vector3 topNormal = Vector3Normalize(Vector3CrossProduct(maxMinRay.direction, minMinRay.direction));
+	Vector3 leftNormal = Vector3Normalize(Vector3CrossProduct(minMinRay.direction, minMaxRay.direction));
+	Vector3 bottomNormal = Vector3Normalize(Vector3CrossProduct(minMaxRay.direction, maxMaxRay.direction));
+	Vector3 rightNormal = Vector3Normalize(Vector3CrossProduct(maxMaxRay.direction, maxMinRay.direction));
+
+	float topAnchor = Vector3DotProduct(topNormal, anchor);
+	float leftAnchor = Vector3DotProduct(leftNormal, anchor);
+	float bottomAnchor = Vector3DotProduct(bottomNormal, anchor);
+	float rightAnchor = Vector3DotProduct(rightNormal, anchor);
+
+	static std::array<Vector3, 9> offsets = {
+		Vector3{0.f,0.f,0.f},
+		Vector3{0.f,0.f,SpaceData::Width},
+		Vector3{0.f,0.f,-SpaceData::Width},
+		Vector3{SpaceData::Depth,0.f,0.f},
+		Vector3{SpaceData::Depth,0.f,SpaceData::Width},
+		Vector3{SpaceData::Depth,0.f,-SpaceData::Width},
+		Vector3{-SpaceData::Depth,0.f,0.f},
+		Vector3{-SpaceData::Depth,0.f,SpaceData::Width},
+		Vector3{-SpaceData::Depth,0.f,-SpaceData::Width}
+	};
+
+	for (auto asteroid : registry.view<AsteroidComponent>()) {
+		for (const Vector3& offset : offsets) {
+			const Vector3 position = Vector3Add(registry.get<PositionComponent>(asteroid).Position, offset);
+			const float radius = registry.get<AsteroidComponent>(asteroid).Radius;
+
+			float topSupport = Vector3DotProduct(topNormal, position) - radius;
+			float leftSupport = Vector3DotProduct(leftNormal, position) - radius;
+			float bottomSupport = Vector3DotProduct(bottomNormal, position) - radius;
+			float rightSupport = Vector3DotProduct(rightNormal, position) - radius;
+
+			if (topSupport <= topAnchor && leftSupport <= leftAnchor && bottomSupport <= bottomAnchor && rightSupport <= rightAnchor) {
+				DrawSphereWires(position, radius, 8, 8, YELLOW);
+				break;
+			}
 		}
-		else {
-			DrawSphere(position, 0.2f, GREEN);
+	}
+
+	for (entt::entity particle : registry.view<ParticleComponent>()) {
+		for (const Vector3& offset : offsets) {
+			const Vector3 position = Vector3Add(registry.get<PositionComponent>(particle).Position, offset);
+
+			float topSupport = Vector3DotProduct(topNormal, position);
+			float leftSupport = Vector3DotProduct(leftNormal, position);
+			float bottomSupport = Vector3DotProduct(bottomNormal, position);
+			float rightSupport = Vector3DotProduct(rightNormal, position);
+
+			if (topSupport <= topAnchor && leftSupport <= leftAnchor && bottomSupport <= bottomAnchor && rightSupport <= rightAnchor) {
+				if (!registry.any_of<OrientationComponent>(particle))
+				{
+					DrawPoint3D(position, ORANGE);
+				}
+				else {
+					DrawSphere(position, 0.2f, GREEN);
+				}
+				break;
+			}
 		}
 	}
 
 	EndMode3D();
+	DrawFPS(10, 10);
 	EndDrawing();
 }
 
@@ -160,13 +220,19 @@ void main() {
 	uint32_t simTicks = 0;
 	uint32_t ticksPerPass = 1;
 	while (!WindowShouldClose()) {
+		double currentGameTime = GetTime();
+		double lastSimTickTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
+		if (currentGameTime <= lastSimTickTime) {
+			continue;
+		}
 		UpdateInput(camera, *gameInput);
 		uint32_t counter = ticksPerPass;
 		while (counter-- > 0) {
 			sim.Tick();
-			simTicks += 1;
 		}
-		if (gameStartTime + SimTimeData::DeltaTime * (simTicks + 1) <= GetTime()) {
+		simTicks += ticksPerPass;
+		lastSimTickTime += SimTimeData::DeltaTime * ticksPerPass;
+		if (lastSimTickTime < currentGameTime) {
 			ticksPerPass += 1;
 		}
 		else {

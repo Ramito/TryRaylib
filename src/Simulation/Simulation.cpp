@@ -2,6 +2,7 @@
 
 #include "Components.h"
 #include <raymath.h>
+#include <random>
 
 Simulation::Simulation(const SimDependencies& dependencies) : mRegistry(dependencies.GetDependency<entt::registry>()),
 mGameInput(dependencies.GetDependency<std::remove_reference<decltype(mGameInput)>::type>())
@@ -20,6 +21,20 @@ void Simulation::Init() {
 	mRegistry.emplace<VelocityComponent>(player, 0.f, 0.f, 0.f);
 	mRegistry.emplace<OrientationComponent>(player, QuaternionIdentity());
 	mRegistry.emplace<GunComponent>(player, 0.f, 0u);
+
+	std::default_random_engine randomGenerator;
+	std::uniform_real_distribution<float> depthDistribution(0.f, SpaceData::Depth);
+	std::uniform_real_distribution<float> widthDistribution(0.f, SpaceData::Width);
+	std::uniform_real_distribution<float> speedDistribution(0.f, 2.f * SpaceData::AsteroidDriftSpeed);
+	std::uniform_real_distribution<float> directionDistribution(0.f, 2.f * PI);
+	for (int i = 0; i < SpaceData::AsteroidsCount; ++i) {
+		entt::entity asteroid = mRegistry.create();
+		mRegistry.emplace<AsteroidComponent>(asteroid, SpaceData::AsteroidRadius);
+		mRegistry.emplace<PositionComponent>(asteroid, depthDistribution(randomGenerator), 0.f, widthDistribution(randomGenerator));
+		float angle = directionDistribution(randomGenerator);
+		float speed = speedDistribution(randomGenerator);
+		mRegistry.emplace<VelocityComponent>(asteroid, Vector3{ cos(angle) * speed, 0.f, sin(angle) * speed });
+	}
 }
 
 static Vector3 HorizontalOrthogonal(const Vector3& vector) {
@@ -37,7 +52,7 @@ static void Simulate(entt::registry& registry) {
 
 	auto playerView = registry.view<PositionComponent, VelocityComponent, OrientationComponent, SteerComponent, SpaceshipInputComponent, ThrustComponent>();
 	auto playerProcess = [deltaTime, &registry](entt::entity entity,
-		PositionComponent& positionComponent,
+		const PositionComponent& positionComponent,
 		VelocityComponent& velocityComponent,
 		OrientationComponent& orientationComponent,
 		SteerComponent& steerComponent,
@@ -72,9 +87,6 @@ static void Simulate(entt::registry& registry) {
 			}
 
 			velocityComponent.Velocity = velocity;
-			Vector3 displacement = Vector3Scale(velocity, deltaTime);
-
-			positionComponent.Position = Vector3Add(positionComponent.Position, displacement);
 
 			float steer = steerComponent.Steer;
 			float steerSign = (steer >= 0.f) ? 1.f : -1.f;
@@ -192,7 +204,7 @@ static void Simulate(entt::registry& registry) {
 			constexpr float RandomModule = 5.5f;
 			constexpr float Offset = 0.4f;
 			constexpr uint32_t MinParticles = 0;
-			constexpr uint32_t MaxParticles = 3;
+			constexpr uint32_t MaxParticles = 2;
 			float relativeThrust = thrustComponent.Thrust / SpaceshipData::Thrust;
 			uint32_t particles = MinParticles + relativeThrust * relativeThrust * MaxParticles;
 
@@ -217,14 +229,13 @@ static void Simulate(entt::registry& registry) {
 	auto particleView = registry.view<ParticleComponent, PositionComponent, VelocityComponent>();
 	auto particleProcess = [deltaTime, &registry](entt::entity particle,
 		ParticleComponent& particleComponent,
-		PositionComponent& positionComponent,
+		const PositionComponent& positionComponent,
 		VelocityComponent& velocityComponent) {
 			if (particleComponent.LifeTime == 0) {
 				registry.destroy(particle);
 				return;
 			}
 			particleComponent.LifeTime--;
-			positionComponent.Position = Vector3Add(positionComponent.Position, Vector3Scale(velocityComponent.Velocity, deltaTime));
 
 			if (registry.any_of<OrientationComponent>(particle)) {
 				// It's a bullet!
@@ -238,6 +249,31 @@ static void Simulate(entt::registry& registry) {
 			}
 	};
 	particleView.each(particleProcess);
+
+	auto dynamicView = registry.view<PositionComponent, VelocityComponent>();
+	auto dynamicProcess = [deltaTime](PositionComponent& positionComponent, const VelocityComponent& velocityComponent) {
+		positionComponent.Position = Vector3Add(positionComponent.Position, Vector3Scale(velocityComponent.Velocity, deltaTime));
+	};
+	dynamicView.each(dynamicProcess);
+
+	auto warpView = registry.view<PositionComponent>();
+	auto warpProcess = [](PositionComponent& positionComponent) {
+		const float x = positionComponent.Position.x;
+		const float z = positionComponent.Position.z;
+		if (x < 0.f) {
+			positionComponent.Position.x += SpaceData::Depth;
+		}
+		else if (x > SpaceData::Depth) {
+			positionComponent.Position.x -= SpaceData::Depth;
+		}
+		if (z < 0.f) {
+			positionComponent.Position.z += SpaceData::Width;
+		}
+		else if (z > SpaceData::Width) {
+			positionComponent.Position.z -= SpaceData::Width;
+		}
+	};
+	warpView.each(warpProcess);
 }
 
 void Simulation::Tick() {
