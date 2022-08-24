@@ -50,9 +50,8 @@ static void ProcessInput(entt::registry& registry, const std::array<GameInput, 4
 static void Simulate(entt::registry& registry) {
 	constexpr float deltaTime = SimTimeData::DeltaTime;
 
-	auto playerView = registry.view<PositionComponent, VelocityComponent, OrientationComponent, SteerComponent, SpaceshipInputComponent, ThrustComponent>();
+	auto playerView = registry.view<VelocityComponent, OrientationComponent, SteerComponent, SpaceshipInputComponent, ThrustComponent>();
 	auto playerProcess = [deltaTime, &registry](entt::entity entity,
-		const PositionComponent& positionComponent,
 		VelocityComponent& velocityComponent,
 		OrientationComponent& orientationComponent,
 		SteerComponent& steerComponent,
@@ -226,10 +225,9 @@ static void Simulate(entt::registry& registry) {
 	};
 	thrustView.each(thrustParticleProcess);
 
-	auto particleView = registry.view<ParticleComponent, PositionComponent, VelocityComponent>();
+	auto particleView = registry.view<ParticleComponent, VelocityComponent>();
 	auto particleProcess = [deltaTime, &registry](entt::entity particle,
 		ParticleComponent& particleComponent,
-		const PositionComponent& positionComponent,
 		VelocityComponent& velocityComponent) {
 			if (particleComponent.LifeTime == 0) {
 				registry.destroy(particle);
