@@ -104,14 +104,14 @@ static void Draw(Camera& camera, entt::registry& registry) {
 
 	static std::array<Vector3, 9> offsets = {
 		Vector3{0.f,0.f,0.f},
-		Vector3{0.f,0.f,SpaceData::Width},
-		Vector3{0.f,0.f,-SpaceData::Width},
-		Vector3{SpaceData::Depth,0.f,0.f},
-		Vector3{SpaceData::Depth,0.f,SpaceData::Width},
-		Vector3{SpaceData::Depth,0.f,-SpaceData::Width},
-		Vector3{-SpaceData::Depth,0.f,0.f},
-		Vector3{-SpaceData::Depth,0.f,SpaceData::Width},
-		Vector3{-SpaceData::Depth,0.f,-SpaceData::Width}
+		Vector3{0.f,0.f,SpaceData::LengthZ},
+		Vector3{0.f,0.f,-SpaceData::LengthZ},
+		Vector3{SpaceData::LengthX,0.f,0.f},
+		Vector3{SpaceData::LengthX,0.f,SpaceData::LengthZ},
+		Vector3{SpaceData::LengthX,0.f,-SpaceData::LengthZ},
+		Vector3{-SpaceData::LengthX,0.f,0.f},
+		Vector3{-SpaceData::LengthX,0.f,SpaceData::LengthZ},
+		Vector3{-SpaceData::LengthX,0.f,-SpaceData::LengthZ}
 	};
 
 	for (auto asteroid : registry.view<AsteroidComponent>()) {

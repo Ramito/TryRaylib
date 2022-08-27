@@ -25,8 +25,10 @@ namespace SpaceData {
 	constexpr uint32_t AsteroidsCount = 500;
 	constexpr float AsteroidRadius = 2.5f;
 	constexpr float AsteroidDriftSpeed = 2.f;
-	constexpr float Width = 1000.f;
-	constexpr float Depth = 250.f;
+	constexpr float LengthX = 1000.f;
+	constexpr float LengthZ = 250.f;
+	constexpr int CellCountX = 100;
+	constexpr int CellCountZ = 25;
 }
 
 namespace SpaceshipData {

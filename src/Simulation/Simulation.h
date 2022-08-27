@@ -3,6 +3,7 @@
 #include "entt/entt.hpp"
 #include "DependencyContainer.h"
 #include "Data.h"
+#include "SpatialPartition.h"
 
 struct SimFlag {};
 using SimDependencies = DependencyContainer<SimFlag>;
@@ -15,6 +16,9 @@ public:
 	void Tick();
 
 private:
+	void Simulate();
+
 	entt::registry& mRegistry;
 	const std::array<GameInput, 4>& mGameInput;
+	SpatialPartition<entt::entity> mSpatialPartition;
 };

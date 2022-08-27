@@ -23,18 +23,20 @@ void Simulation::Init() {
 	mRegistry.emplace<GunComponent>(player, 0.f, 0u);
 
 	std::default_random_engine randomGenerator;
-	std::uniform_real_distribution<float> depthDistribution(0.f, SpaceData::Depth);
-	std::uniform_real_distribution<float> widthDistribution(0.f, SpaceData::Width);
+	std::uniform_real_distribution<float> xDistribution(0.f, SpaceData::LengthX);
+	std::uniform_real_distribution<float> zDistribution(0.f, SpaceData::LengthZ);
 	std::uniform_real_distribution<float> speedDistribution(0.f, 2.f * SpaceData::AsteroidDriftSpeed);
 	std::uniform_real_distribution<float> directionDistribution(0.f, 2.f * PI);
 	for (int i = 0; i < SpaceData::AsteroidsCount; ++i) {
 		entt::entity asteroid = mRegistry.create();
 		mRegistry.emplace<AsteroidComponent>(asteroid, SpaceData::AsteroidRadius);
-		mRegistry.emplace<PositionComponent>(asteroid, depthDistribution(randomGenerator), 0.f, widthDistribution(randomGenerator));
+		mRegistry.emplace<PositionComponent>(asteroid, xDistribution(randomGenerator), 0.f, zDistribution(randomGenerator));
 		float angle = directionDistribution(randomGenerator);
 		float speed = speedDistribution(randomGenerator);
 		mRegistry.emplace<VelocityComponent>(asteroid, Vector3{ cos(angle) * speed, 0.f, sin(angle) * speed });
 	}
+
+	mSpatialPartition.InitArea({ SpaceData::LengthX, SpaceData::LengthZ }, SpaceData::CellCountX, SpaceData::CellCountZ);
 }
 
 static Vector3 HorizontalOrthogonal(const Vector3& vector) {
@@ -47,11 +49,11 @@ static void ProcessInput(entt::registry& registry, const std::array<GameInput, 4
 	}
 }
 
-static void Simulate(entt::registry& registry) {
+void Simulation::Simulate() {
 	constexpr float deltaTime = SimTimeData::DeltaTime;
 
-	auto playerView = registry.view<VelocityComponent, OrientationComponent, SteerComponent, SpaceshipInputComponent, ThrustComponent>();
-	auto playerProcess = [deltaTime, &registry](entt::entity entity,
+	auto playerView = mRegistry.view<VelocityComponent, OrientationComponent, SteerComponent, SpaceshipInputComponent, ThrustComponent>();
+	auto playerProcess = [this](entt::entity entity,
 		VelocityComponent& velocityComponent,
 		OrientationComponent& orientationComponent,
 		SteerComponent& steerComponent,
@@ -165,8 +167,8 @@ static void Simulate(entt::registry& registry) {
 	};
 	playerView.each(playerProcess);
 
-	auto shootView = registry.view<PositionComponent, VelocityComponent, OrientationComponent, SpaceshipInputComponent, GunComponent>();
-	auto shootProcess = [&registry](const PositionComponent& positionComponent,
+	auto shootView = mRegistry.view<PositionComponent, VelocityComponent, OrientationComponent, SpaceshipInputComponent, GunComponent>();
+	auto shootProcess = [this](const PositionComponent& positionComponent,
 		const VelocityComponent& velocityComponent,
 		const OrientationComponent& orientationComponent,
 		const SpaceshipInputComponent& inputComponent,
@@ -182,11 +184,11 @@ static void Simulate(entt::registry& registry) {
 			Vector3 offset = Vector3RotateByQuaternion(WeaponData::ShootBones[gunComponent.NextShotBone], orientationComponent.Quaternion);
 			Vector3 shotPosition = Vector3Add(positionComponent.Position, offset);
 			Vector3 shotVelocity = Vector3Add(velocityComponent.Velocity, Vector3Scale(forward, WeaponData::BulletSpeed));
-			entt::entity bullet = registry.create();
-			registry.emplace<PositionComponent>(bullet, shotPosition);
-			registry.emplace<OrientationComponent>(bullet, orientationComponent.Quaternion);
-			registry.emplace<VelocityComponent>(bullet, shotVelocity);
-			registry.emplace<ParticleComponent>(bullet, static_cast<uint32_t>(WeaponData::BulletLifetime / SimTimeData::DeltaTime));
+			entt::entity bullet = mRegistry.create();
+			mRegistry.emplace<PositionComponent>(bullet, shotPosition);
+			mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Quaternion);
+			mRegistry.emplace<VelocityComponent>(bullet, shotVelocity);
+			mRegistry.emplace<ParticleComponent>(bullet, static_cast<uint32_t>(WeaponData::BulletLifetime / SimTimeData::DeltaTime));
 			gunComponent.NextShotBone += 1;
 			gunComponent.NextShotBone %= WeaponData::ShootBones.size();
 			gunComponent.TimeBeforeNextShot = WeaponData::RateOfFire;
@@ -194,8 +196,8 @@ static void Simulate(entt::registry& registry) {
 	};
 	shootView.each(shootProcess);
 
-	auto thrustView = registry.view<ThrustComponent, PositionComponent, VelocityComponent, OrientationComponent>();
-	auto thrustParticleProcess = [&](ThrustComponent& thrustComponent,
+	auto thrustView = mRegistry.view<ThrustComponent, PositionComponent, VelocityComponent, OrientationComponent>();
+	auto thrustParticleProcess = [this](ThrustComponent& thrustComponent,
 		const PositionComponent& positionComponent,
 		const VelocityComponent& velocityComponent,
 		const OrientationComponent& orientationComponent) {
@@ -212,30 +214,30 @@ static void Simulate(entt::registry& registry) {
 			baseVelocity = Vector3Add(baseVelocity, Vector3Scale(back, thrustComponent.Thrust * ThrustModule * deltaTime));
 
 			while (particles-- > 0) {
-				entt::entity particleEntity = registry.create();
-				registry.emplace<PositionComponent>(particleEntity, Vector3Add(positionComponent.Position, Vector3Scale(back, Offset)));
+				entt::entity particleEntity = mRegistry.create();
+				mRegistry.emplace<PositionComponent>(particleEntity, Vector3Add(positionComponent.Position, Vector3Scale(back, Offset)));
 				float randX = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
 				float randY = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
 				float randZ = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
 				Vector3 randomVelocity = Vector3Scale({ randX, randY, randZ }, RandomModule);
-				registry.emplace<VelocityComponent>(particleEntity, Vector3Add(baseVelocity, randomVelocity));
+				mRegistry.emplace<VelocityComponent>(particleEntity, Vector3Add(baseVelocity, randomVelocity));
 				uint32_t lifetime = (std::rand() + std::rand()) / (2 * RAND_MAX / 1250);
-				registry.emplace<ParticleComponent>(particleEntity, lifetime);
+				mRegistry.emplace<ParticleComponent>(particleEntity, lifetime);
 			}
 	};
 	thrustView.each(thrustParticleProcess);
 
-	auto particleView = registry.view<ParticleComponent, VelocityComponent>();
-	auto particleProcess = [deltaTime, &registry](entt::entity particle,
+	auto particleView = mRegistry.view<ParticleComponent, VelocityComponent>();
+	auto particleProcess = [deltaTime, this](entt::entity particle,
 		ParticleComponent& particleComponent,
 		VelocityComponent& velocityComponent) {
 			if (particleComponent.LifeTime == 0) {
-				registry.destroy(particle);
+				mRegistry.destroy(particle);
 				return;
 			}
 			particleComponent.LifeTime--;
 
-			if (registry.any_of<OrientationComponent>(particle)) {
+			if (mRegistry.any_of<OrientationComponent>(particle)) {
 				// It's a bullet!
 				return;
 			}
@@ -248,27 +250,42 @@ static void Simulate(entt::registry& registry) {
 	};
 	particleView.each(particleProcess);
 
-	auto dynamicView = registry.view<PositionComponent, VelocityComponent>();
-	auto dynamicProcess = [deltaTime](PositionComponent& positionComponent, const VelocityComponent& velocityComponent) {
+	auto dynamicView = mRegistry.view<PositionComponent, VelocityComponent>();
+	auto dynamicProcess = [](PositionComponent& positionComponent, const VelocityComponent& velocityComponent) {
 		positionComponent.Position = Vector3Add(positionComponent.Position, Vector3Scale(velocityComponent.Velocity, deltaTime));
 	};
 	dynamicView.each(dynamicProcess);
 
-	auto warpView = registry.view<PositionComponent>();
+	mSpatialPartition.Clear();
+
+	auto asteroidView = mRegistry.view<PositionComponent, AsteroidComponent>();
+	auto partitionAsteroids = [this](entt::entity asteroid, const PositionComponent& positionComponent, const AsteroidComponent& asteroidComponent)
+	{
+		const float radius = asteroidComponent.Radius;
+		const Vector2 flatPosition = { positionComponent.Position.x, positionComponent.Position.z };
+		Vector2 min = { flatPosition.x - radius, flatPosition.y - radius };
+		Vector2 max = { flatPosition.x + radius, flatPosition.y + radius };
+		mSpatialPartition.InsertDeferred(asteroid, min, max);
+	};
+	asteroidView.each(partitionAsteroids);
+
+	mSpatialPartition.FlushInsertions();
+
+	auto warpView = mRegistry.view<PositionComponent>();
 	auto warpProcess = [](PositionComponent& positionComponent) {
 		const float x = positionComponent.Position.x;
 		const float z = positionComponent.Position.z;
 		if (x < 0.f) {
-			positionComponent.Position.x += SpaceData::Depth;
+			positionComponent.Position.x += SpaceData::LengthX;
 		}
-		else if (x > SpaceData::Depth) {
-			positionComponent.Position.x -= SpaceData::Depth;
+		else if (x > SpaceData::LengthX) {
+			positionComponent.Position.x -= SpaceData::LengthX;
 		}
 		if (z < 0.f) {
-			positionComponent.Position.z += SpaceData::Width;
+			positionComponent.Position.z += SpaceData::LengthZ;
 		}
-		else if (z > SpaceData::Width) {
-			positionComponent.Position.z -= SpaceData::Width;
+		else if (z > SpaceData::LengthZ) {
+			positionComponent.Position.z -= SpaceData::LengthZ;
 		}
 	};
 	warpView.each(warpProcess);
@@ -276,5 +293,5 @@ static void Simulate(entt::registry& registry) {
 
 void Simulation::Tick() {
 	ProcessInput(mRegistry, mGameInput);
-	Simulate(mRegistry);
+	Simulate();
 }
