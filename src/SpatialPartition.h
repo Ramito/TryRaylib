@@ -82,6 +82,32 @@ public:
 		}
 	}
 
+	template<typename TPairAction>
+	void IteratePairs(TPairAction&& pairAction) {
+		mPairAccumulator.clear();
+		for (size_t cellIndex = 0; cellIndex < mPackedCells.size(); ++cellIndex) {
+			const uint32_t cellFirst = mCellFirst[cellIndex];
+			const uint32_t cellCount = mCellCounts[cellIndex];
+			const size_t accumulatorSize = mPairAccumulator.size();
+			for (size_t firstIt = 0; firstIt < cellCount - 1; ++firstIt) {
+				const uint32_t firstItem = mPartition[cellFirst + firstIt];
+				for (size_t secondIt = firstIt + 1; secondIt < cellCount; ++secondIt) {
+					const uint32_t secondItem = mPartition[cellFirst + secondIt];
+					IndexPair pair = { firstItem, secondItem };
+					auto lower = std::lower_bound(mPairAccumulator.begin(), mPairAccumulator.begin() + accumulatorSize, pair, PairCompare{});
+					if (lower != mPairAccumulator.end() && *lower == pair) {
+						continue;
+					}
+					mPairAccumulator.push_back(pair);
+					pairAction(mPayloads[firstItem], mPayloads[secondItem]);
+				}
+			}
+			if (accumulatorSize != mPairAccumulator.size()) {
+				std::sort(mPairAccumulator.begin(), mPairAccumulator.end(), PairCompare{});
+			}
+		}
+	}
+
 private:
 	uint32_t GetCellID(const Vector2& point) {
 		float relativeX = std::clamp(point.x / Extents.x, 0.f, 1.f);
@@ -111,6 +137,16 @@ private:
 		uint32_t MaxCellID;
 	};
 
+	using IndexPair = std::pair<uint32_t, uint32_t>;
+	struct PairCompare {
+		bool operator () (const IndexPair& left, const IndexPair& right) {
+			if (left.first == right.first) {
+				return left.second < right.second;
+			}
+			return left.first < right.first;
+		}
+	};
+
 	Vector2 Extents;
 	int CountX;
 	int CountY;
@@ -122,4 +158,6 @@ private:
 	std::vector<uint32_t> mCellFirst;
 	std::vector<uint32_t> mPartition;
 	std::vector<InsertionArea> mInsertionAreas;
+
+	std::vector<IndexPair> mPairAccumulator;
 };

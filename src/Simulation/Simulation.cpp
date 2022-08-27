@@ -271,6 +271,12 @@ void Simulation::Simulate() {
 
 	mSpatialPartition.FlushInsertions();
 
+	std::vector<entt::entity> haxor;
+	auto collisionHandler = [&haxor](entt::entity asteroid1, entt::entity asteroid2) {
+		haxor.emplace_back(asteroid1);
+	};
+	mSpatialPartition.IteratePairs(collisionHandler);
+
 	auto warpView = mRegistry.view<PositionComponent>();
 	auto warpProcess = [](PositionComponent& positionComponent) {
 		const float x = positionComponent.Position.x;
