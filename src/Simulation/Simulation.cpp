@@ -257,6 +257,25 @@ void Simulation::Simulate() {
 	};
 	dynamicView.each(dynamicProcess);
 
+	auto warpView = mRegistry.view<PositionComponent>();
+	auto warpProcess = [](PositionComponent& positionComponent) {
+		const float x = positionComponent.Position.x;
+		const float z = positionComponent.Position.z;
+		if (x < 0.f) {
+			positionComponent.Position.x += SpaceData::LengthX;
+		}
+		else if (x > SpaceData::LengthX) {
+			positionComponent.Position.x -= SpaceData::LengthX;
+		}
+		if (z < 0.f) {
+			positionComponent.Position.z += SpaceData::LengthZ;
+		}
+		else if (z > SpaceData::LengthZ) {
+			positionComponent.Position.z -= SpaceData::LengthZ;
+		}
+	};
+	warpView.each(warpProcess);
+
 	mSpatialPartition.Clear();
 
 	auto asteroidView = mRegistry.view<PositionComponent, AsteroidComponent>();
@@ -275,9 +294,6 @@ void Simulation::Simulate() {
 	auto collisionHandler = [this](entt::entity asteroid1, entt::entity asteroid2) {
 		const Vector3& position1 = mRegistry.get<PositionComponent>(asteroid1).Position;
 		const Vector3& position2 = mRegistry.get<PositionComponent>(asteroid2).Position;
-
-		Vector3& velocity1 = mRegistry.get<VelocityComponent>(asteroid1).Velocity;
-		Vector3& velocity2 = mRegistry.get<VelocityComponent>(asteroid2).Velocity;
 
 		auto findGap = [](float coord1, float coord2, float mod) {
 			float coordGap = coord2 - coord1;
@@ -298,47 +314,34 @@ void Simulation::Simulate() {
 		const float z2 = position2.z;
 		const float gapZ = findGap(z1, z2, SpaceData::LengthZ);
 
+		const Vector3 gap = { gapX, position2.y - position2.y, gapZ };
+
+		Vector3& velocity1 = mRegistry.get<VelocityComponent>(asteroid1).Velocity;
+		Vector3& velocity2 = mRegistry.get<VelocityComponent>(asteroid2).Velocity;
+		const Vector3 relativeVelocity = Vector3Subtract(velocity2, velocity1);
+
+		float projection = Vector3DotProduct(gap, relativeVelocity);
+		if (projection >= 0.f)
+		{
+			return;
+		}
+
 		float radius1 = mRegistry.get<AsteroidComponent>(asteroid1).Radius;
 		float radius2 = mRegistry.get<AsteroidComponent>(asteroid2).Radius;
 		float minDistance = radius1 + radius2;
 
 		float distanceSq = gapX * gapX + gapZ * gapZ;
 		if (distanceSq < minDistance * minDistance) {
-			const Vector3 relativeVelocity = Vector3Subtract(velocity2, velocity1);
 			const float mass1 = radius1 * radius1 * radius1;
 			const float mass2 = radius2 * radius2 * radius2;
 			const float massNormalizer = 2.f / (mass1 + mass2);
-			const Vector3 gap = { gapX, position2.y - position2.y, gapZ };
-			float projection = Vector3DotProduct(gap, relativeVelocity);
-			if (projection >= 0.f)
-			{
-				return;
-			}
+
 			const Vector3 transferedvelocity = Vector3Scale(gap, projection / distanceSq);
 			velocity1 = Vector3Add(velocity1, Vector3Scale(transferedvelocity, mass2 * massNormalizer));
 			velocity2 = Vector3Subtract(velocity2, Vector3Scale(transferedvelocity, mass1 * massNormalizer));
 		}
 	};
 	mSpatialPartition.IteratePairs(collisionHandler);
-
-	auto warpView = mRegistry.view<PositionComponent>();
-	auto warpProcess = [](PositionComponent& positionComponent) {
-		const float x = positionComponent.Position.x;
-		const float z = positionComponent.Position.z;
-		if (x < 0.f) {
-			positionComponent.Position.x += SpaceData::LengthX;
-		}
-		else if (x > SpaceData::LengthX) {
-			positionComponent.Position.x -= SpaceData::LengthX;
-		}
-		if (z < 0.f) {
-			positionComponent.Position.z += SpaceData::LengthZ;
-		}
-		else if (z > SpaceData::LengthZ) {
-			positionComponent.Position.z -= SpaceData::LengthZ;
-		}
-	};
-	warpView.each(warpProcess);
 }
 
 void Simulation::Tick() {

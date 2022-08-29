@@ -85,10 +85,12 @@ public:
 	template<typename TPairAction>
 	void IteratePairs(TPairAction&& pairAction) {
 		mPairAccumulator.clear();
+		mPairAppend.clear();
 		for (size_t cellIndex = 0; cellIndex < mPackedCells.size(); ++cellIndex) {
 			const uint32_t cellFirst = mCellFirst[cellIndex];
 			const uint32_t cellCount = mCellCounts[cellIndex];
 			const size_t accumulatorSize = mPairAccumulator.size();
+			size_t minBound = accumulatorSize;
 			for (size_t firstIt = 0; firstIt < cellCount - 1; ++firstIt) {
 				const uint32_t firstItem = mPartition[cellFirst + firstIt];
 				for (size_t secondIt = firstIt + 1; secondIt < cellCount; ++secondIt) {
@@ -98,11 +100,30 @@ public:
 					if (lower != mPairAccumulator.end() && *lower == pair) {
 						continue;
 					}
-					mPairAccumulator.push_back(pair);
+					minBound = std::min<size_t>(minBound, std::distance(mPairAccumulator.begin(), lower));
+					mPairAppend.push_back(pair);
 					pairAction(mPayloads[firstItem], mPayloads[secondItem]);
 				}
 			}
-			if (accumulatorSize != mPairAccumulator.size()) {
+			if (mPairAppend.empty()) {
+				continue;
+			}
+			uint32_t itemBound = mPairAppend.front().first;
+			if (accumulatorSize == minBound) {
+				if (!mPairAccumulator.empty() && mPairAccumulator.back().first < itemBound) {
+					mPairAccumulator.clear();
+				}
+			}
+			else {
+				auto remover = [&](const auto& itPair) {
+					return itPair.first < itemBound;
+				};
+				mPairAccumulator.erase(std::remove_if(mPairAccumulator.begin(), mPairAccumulator.begin() + minBound, remover), mPairAccumulator.begin() + minBound);
+			}
+			mPairAccumulator.insert(mPairAccumulator.end(), mPairAppend.begin(), mPairAppend.end());
+			mPairAppend.clear();
+			if (accumulatorSize != minBound)
+			{
 				std::sort(mPairAccumulator.begin(), mPairAccumulator.end(), PairCompare{});
 			}
 		}
@@ -164,4 +185,5 @@ private:
 	std::vector<Area> mInsertionAreas;
 
 	std::vector<IndexPair> mPairAccumulator;
+	std::vector<IndexPair> mPairAppend;
 };

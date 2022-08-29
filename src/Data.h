@@ -23,8 +23,8 @@ namespace SimTimeData {
 
 namespace SpaceData {
 	constexpr uint32_t AsteroidsCount = 600;
-	constexpr float MinAsteroidRadius = 4.5f;
-	constexpr float MaxAsteroidRadius = 1.25f;
+	constexpr float MinAsteroidRadius = 1.25f;
+	constexpr float MaxAsteroidRadius = 4.5f;
 	constexpr float AsteroidDriftSpeed = 3.f;
 	constexpr float LengthX = 1000.f;
 	constexpr float LengthZ = 250.f;
