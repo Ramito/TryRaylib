@@ -31,14 +31,16 @@ public:
 		assert(min.y <= max.y);
 
 		mPayloads.push_back(payload);
-		uint32_t minCellID = GetCellID(min);
-		uint32_t maxCellID = GetCellID(max);
+		auto [minI, minJ] = CellIntCoords(min);
+		auto [maxI, maxJ] = CellIntCoords(max);
 
-		mInsertionAreas.emplace_back(minCellID, maxCellID);
+		Area area = { minI, minJ, maxI, maxJ };
+
+		mInsertionAreas.push_back(area);
 	}
 
 	void FlushInsertions() {
-		for (const InsertionArea& area : mInsertionAreas) {
+		for (const Area& area : mInsertionAreas) {
 			auto countAction = [this](uint32_t cellIt) {
 				uint32_t cellIndex = mSparseCells[cellIt];
 				bool exists = cellIndex < mPackedCells.size() && mPackedCells[cellIndex] == cellIt;
@@ -50,8 +52,7 @@ public:
 				}
 				mCellCounts[cellIndex]++;
 			};
-
-			IterateCells(area.MinCellID, area.MaxCellID, countAction);
+			IterateArea(area, countAction);
 		}
 
 		// Determine first index for each cell
@@ -69,15 +70,14 @@ public:
 		mCellCounts.assign(mPackedCells.size(), 0);
 
 		uint32_t payloadId = 0;
-		for (const InsertionArea& area : mInsertionAreas) {
+		for (const Area& area : mInsertionAreas) {
 			auto insertAction = [this, payloadId](uint32_t cellIt) {
 				const uint32_t cellIndex = mSparseCells[cellIt];
 				const uint32_t insertIndex = mCellFirst[cellIndex] + mCellCounts[cellIndex];
 				mCellCounts[cellIndex] += 1;
 				mPartition[insertIndex] = payloadId;
 			};
-
-			IterateCells(area.MinCellID, area.MaxCellID, insertAction);
+			IterateArea(area, insertAction);
 			++payloadId;
 		}
 	}
@@ -109,32 +109,11 @@ public:
 	}
 
 private:
-	uint32_t GetCellID(const Vector2& point) {
-		float relativeX = std::clamp(point.x / Extents.x, 0.f, 1.f);
-		float relativeY = std::clamp(point.y / Extents.y, 0.f, 1.f);
-		int i = std::min(static_cast<int>(relativeX * CountX), CountX - 1);
-		int j = std::min(static_cast<int>(relativeY * CountY), CountY - 1);
-		return i + j * CountX;
-	}
-
-	template<typename TAction>
-	void IterateCells(uint32_t minCell, uint32_t maxCell, TAction&& action)
-	{
-		uint32_t strideX = (maxCell % CountX) - (minCell % CountX);
-		uint32_t strideY = (maxCell / CountX) - (minCell / CountX);
-
-		uint32_t cellIt = minCell;
-		for (uint32_t j = 0; j <= strideY; ++j) {
-			for (uint32_t i = 0; i <= strideX; ++i) {
-				action(cellIt + i);
-			}
-			cellIt += CountX;
-		}
-	}
-
-	struct InsertionArea {
-		uint32_t MinCellID;
-		uint32_t MaxCellID;
+	struct Area {
+		int MinI;
+		int MinJ;
+		int MaxI;
+		int MaxJ;
 	};
 
 	using IndexPair = std::pair<uint32_t, uint32_t>;
@@ -147,6 +126,31 @@ private:
 		}
 	};
 
+	inline std::tuple<int, int> CellIntCoords(const Vector2& point) {
+		float relativeX = point.x / Extents.x;
+		float relativeY = point.y / Extents.y;
+		assert(relativeX >= -1.f);
+		assert(relativeY >= -1.f);
+		return { static_cast<int>((1.f + relativeX) * CountX) - CountX, static_cast<int>((1.f + relativeY) * CountY) - CountY };
+	}
+
+	inline uint32_t GetCellID(const int i, const int j) {
+		int iMod = (i % CountX + CountX) % CountX;
+		int jMod = (j % CountY + CountY) % CountY;
+		return iMod + jMod * CountX;
+	}
+
+	template<typename TAction>
+	void IterateArea(const Area& area, TAction&& action) {
+		assert(area.MinI < CountX&& area.MinJ < CountY);
+		assert(area.MaxI >= 0 && area.MaxJ >= 0);
+		for (int j = area.MinJ; j <= area.MaxJ; ++j) {
+			for (int i = area.MinI; i <= area.MaxI; ++i) {
+				action(GetCellID(i, j));
+			}
+		}
+	}
+
 	Vector2 Extents;
 	int CountX;
 	int CountY;
@@ -157,7 +161,7 @@ private:
 	std::vector<uint32_t> mCellCounts;
 	std::vector<uint32_t> mCellFirst;
 	std::vector<uint32_t> mPartition;
-	std::vector<InsertionArea> mInsertionAreas;
+	std::vector<Area> mInsertionAreas;
 
 	std::vector<IndexPair> mPairAccumulator;
 };
