@@ -314,7 +314,7 @@ void Simulation::Simulate() {
 		const float z2 = position2.z;
 		const float gapZ = findGap(z1, z2, SpaceData::LengthZ);
 
-		const Vector3 gap = { gapX, position2.y - position2.y, gapZ };
+		const Vector3 gap = { gapX, position2.y - position1.y, gapZ };
 
 		Vector3& velocity1 = mRegistry.get<VelocityComponent>(asteroid1).Velocity;
 		Vector3& velocity2 = mRegistry.get<VelocityComponent>(asteroid2).Velocity;
