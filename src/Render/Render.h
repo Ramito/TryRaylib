@@ -16,7 +16,8 @@ public:
 	void Init();
 	void Draw();
 private:
-	uint32_t ViewID;
+	uint32_t mViewID;
 	entt::registry& mRegistry;
 	Camera& mMainCamera;
+	RenderTexture mBackgroundTexture;
 };

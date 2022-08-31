@@ -6,19 +6,21 @@
 
 constexpr Vector3 CameraOffset = { -10.f, 25.f, -10.f };
 
-Render::Render(uint32_t viewID, RenderDependencies& dependencies) : ViewID(viewID)
+Render::Render(uint32_t viewID, RenderDependencies& dependencies) : mViewID(viewID)
 , mRegistry(dependencies.GetDependency<entt::registry>())
 , mMainCamera(dependencies.GetDependency<GameCameras>()[viewID])
 {
 }
 
 void Render::Init() {
-	mMainCamera.position = Vector3Negate(CameraOffset);
 	mMainCamera.target = { 0.f, 0.f, 0.f };
+	mMainCamera.position = Vector3Negate(CameraOffset);
 	mMainCamera.projection = CAMERA_PERSPECTIVE;
 	mMainCamera.up = { 0.f, 1.f, 0.f };
 	mMainCamera.fovy = 70.f;
 	SetCameraMode(mMainCamera, CAMERA_CUSTOM);
+
+	mBackgroundTexture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 }
 
 static void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
@@ -58,96 +60,127 @@ static void DrawSpaceShip(const Vector3& position, const Quaternion orientation)
 	DrawLine3D(vertex1, midBack, RED);
 }
 
-void Render::Draw() {
-
-	for (auto playerEntity : mRegistry.view<PositionComponent>()) {
-		auto& position = mRegistry.get<PositionComponent>(playerEntity);
-		mMainCamera.target = position.Position;
-		mMainCamera.position = Vector3Add(mMainCamera.target, CameraOffset);
-	}
-	UpdateCamera(&mMainCamera);
-	BeginDrawing();
-	ClearBackground(DARKGRAY);
-	BeginMode3D(mMainCamera);
-	DrawGrid(500, 5.0f);
-
-	for (auto entity : mRegistry.view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
-		auto& position = mRegistry.get<PositionComponent>(entity);
-		auto& orientation = mRegistry.get<OrientationComponent>(entity);
-		DrawSpaceShip(position.Position, orientation.Quaternion);
-	}
-
-	const float screenW = GetScreenWidth();
-	const float screenH = GetScreenHeight();
-
-	Ray minMinRay = GetMouseRay(Vector2{ 0.f, 0.f }, mMainCamera);
-	Ray minMaxRay = GetMouseRay(Vector2{ 0.f, screenH }, mMainCamera);
-	Ray maxMaxRay = GetMouseRay(Vector2{ screenW, screenH }, mMainCamera);
-	Ray maxMinRay = GetMouseRay(Vector2{ screenW, 0.f }, mMainCamera);
-
-	Vector3 anchor = mMainCamera.position;
-	Vector3 topNormal = Vector3Normalize(Vector3CrossProduct(maxMinRay.direction, minMinRay.direction));
-	Vector3 leftNormal = Vector3Normalize(Vector3CrossProduct(minMinRay.direction, minMaxRay.direction));
-	Vector3 bottomNormal = Vector3Normalize(Vector3CrossProduct(minMaxRay.direction, maxMaxRay.direction));
-	Vector3 rightNormal = Vector3Normalize(Vector3CrossProduct(maxMaxRay.direction, maxMinRay.direction));
-
-	float topAnchor = Vector3DotProduct(topNormal, anchor);
-	float leftAnchor = Vector3DotProduct(leftNormal, anchor);
-	float bottomAnchor = Vector3DotProduct(bottomNormal, anchor);
-	float rightAnchor = Vector3DotProduct(rightNormal, anchor);
-
-	static constexpr std::array<Vector3, 9> offsets = {
-		Vector3{0.f,0.f,0.f},
-		Vector3{0.f,0.f,SpaceData::LengthZ},
-		Vector3{0.f,0.f,-SpaceData::LengthZ},
-		Vector3{SpaceData::LengthX,0.f,0.f},
-		Vector3{SpaceData::LengthX,0.f,SpaceData::LengthZ},
-		Vector3{SpaceData::LengthX,0.f,-SpaceData::LengthZ},
-		Vector3{-SpaceData::LengthX,0.f,0.f},
-		Vector3{-SpaceData::LengthX,0.f,SpaceData::LengthZ},
-		Vector3{-SpaceData::LengthX,0.f,-SpaceData::LengthZ}
+namespace {
+	constexpr std::array<Vector3, 9> SpaceOffsets = {
+			Vector3{0.f,0.f,0.f},
+			Vector3{0.f,0.f,SpaceData::LengthZ},
+			Vector3{0.f,0.f,-SpaceData::LengthZ},
+			Vector3{SpaceData::LengthX,0.f,0.f},
+			Vector3{SpaceData::LengthX,0.f,SpaceData::LengthZ},
+			Vector3{SpaceData::LengthX,0.f,-SpaceData::LengthZ},
+			Vector3{-SpaceData::LengthX,0.f,0.f},
+			Vector3{-SpaceData::LengthX,0.f,SpaceData::LengthZ},
+			Vector3{-SpaceData::LengthX,0.f,-SpaceData::LengthZ}
 	};
 
-	for (auto asteroid : mRegistry.view<AsteroidComponent>()) {
-		for (const Vector3& offset : offsets) {
-			const Vector3 position = Vector3Add(mRegistry.get<PositionComponent>(asteroid).Position, offset);
-			const float radius = mRegistry.get<AsteroidComponent>(asteroid).Radius;
+	void DrawToCurrentTarget(const Camera& camera, const entt::registry& registry) {
+		for (auto entity : registry.view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
+			auto& position = registry.get<PositionComponent>(entity);
+			auto& orientation = registry.get<OrientationComponent>(entity);
+			DrawSpaceShip(position.Position, orientation.Quaternion);
+		}
 
-			float topSupport = Vector3DotProduct(topNormal, position) - radius;
-			float leftSupport = Vector3DotProduct(leftNormal, position) - radius;
-			float bottomSupport = Vector3DotProduct(bottomNormal, position) - radius;
-			float rightSupport = Vector3DotProduct(rightNormal, position) - radius;
+		const float screenW = GetScreenWidth();
+		const float screenH = GetScreenHeight();
 
-			if (topSupport <= topAnchor && leftSupport <= leftAnchor && bottomSupport <= bottomAnchor && rightSupport <= rightAnchor) {
-				DrawSphereWires(position, radius, 8, 8, YELLOW);
-				break;
+		Ray minMinRay = GetMouseRay(Vector2{ 0.f, 0.f }, camera);
+		Ray minMaxRay = GetMouseRay(Vector2{ 0.f, screenH }, camera);
+		Ray maxMaxRay = GetMouseRay(Vector2{ screenW, screenH }, camera);
+		Ray maxMinRay = GetMouseRay(Vector2{ screenW, 0.f }, camera);
+
+		Vector3 anchor = camera.position;
+		Vector3 topNormal = Vector3Normalize(Vector3CrossProduct(maxMinRay.direction, minMinRay.direction));
+		Vector3 leftNormal = Vector3Normalize(Vector3CrossProduct(minMinRay.direction, minMaxRay.direction));
+		Vector3 bottomNormal = Vector3Normalize(Vector3CrossProduct(minMaxRay.direction, maxMaxRay.direction));
+		Vector3 rightNormal = Vector3Normalize(Vector3CrossProduct(maxMaxRay.direction, maxMinRay.direction));
+
+		float topAnchor = Vector3DotProduct(topNormal, anchor);
+		float leftAnchor = Vector3DotProduct(leftNormal, anchor);
+		float bottomAnchor = Vector3DotProduct(bottomNormal, anchor);
+		float rightAnchor = Vector3DotProduct(rightNormal, anchor);
+
+		for (auto asteroid : registry.view<AsteroidComponent>()) {
+			for (const Vector3& offset : SpaceOffsets) {
+				const Vector3 position = Vector3Add(registry.get<PositionComponent>(asteroid).Position, offset);
+				const float radius = registry.get<AsteroidComponent>(asteroid).Radius;
+
+				float topSupport = Vector3DotProduct(topNormal, position) - radius;
+				float leftSupport = Vector3DotProduct(leftNormal, position) - radius;
+				float bottomSupport = Vector3DotProduct(bottomNormal, position) - radius;
+				float rightSupport = Vector3DotProduct(rightNormal, position) - radius;
+
+				if (topSupport <= topAnchor && leftSupport <= leftAnchor && bottomSupport <= bottomAnchor && rightSupport <= rightAnchor) {
+					DrawSphereWires(position, radius, 8, 8, YELLOW);
+					break;
+				}
+			}
+		}
+
+		for (entt::entity particle : registry.view<ParticleComponent>()) {
+			for (const Vector3& offset : SpaceOffsets) {
+				const Vector3 position = Vector3Add(registry.get<PositionComponent>(particle).Position, offset);
+
+				float topSupport = Vector3DotProduct(topNormal, position);
+				float leftSupport = Vector3DotProduct(leftNormal, position);
+				float bottomSupport = Vector3DotProduct(bottomNormal, position);
+				float rightSupport = Vector3DotProduct(rightNormal, position);
+
+				if (topSupport <= topAnchor && leftSupport <= leftAnchor && bottomSupport <= bottomAnchor && rightSupport <= rightAnchor) {
+					if (!registry.any_of<OrientationComponent>(particle))
+					{
+						DrawPoint3D(position, ORANGE);
+					}
+					else {
+						DrawSphere(position, 0.2f, GREEN);
+					}
+					break;
+				}
 			}
 		}
 	}
+}
 
-	for (entt::entity particle : mRegistry.view<ParticleComponent>()) {
-		for (const Vector3& offset : offsets) {
-			const Vector3 position = Vector3Add(mRegistry.get<PositionComponent>(particle).Position, offset);
-
-			float topSupport = Vector3DotProduct(topNormal, position);
-			float leftSupport = Vector3DotProduct(leftNormal, position);
-			float bottomSupport = Vector3DotProduct(bottomNormal, position);
-			float rightSupport = Vector3DotProduct(rightNormal, position);
-
-			if (topSupport <= topAnchor && leftSupport <= leftAnchor && bottomSupport <= bottomAnchor && rightSupport <= rightAnchor) {
-				if (!mRegistry.any_of<OrientationComponent>(particle))
-				{
-					DrawPoint3D(position, ORANGE);
-				}
-				else {
-					DrawSphere(position, 0.2f, GREEN);
-				}
-				break;
-			}
+void Render::Draw() {
+	for (auto playerEntity : mRegistry.view<PositionComponent, SpaceshipInputComponent>()) {
+		auto& input = mRegistry.get<SpaceshipInputComponent>(playerEntity);
+		if (input.InputId == mViewID) {
+			auto& position = mRegistry.get<PositionComponent>(playerEntity);
+			mMainCamera.target = position.Position;
+			mMainCamera.position = Vector3Add(mMainCamera.target, CameraOffset);
+			UpdateCamera(&mMainCamera);
+			break;
 		}
 	}
 
+	Camera backgroundCamera = mMainCamera;
+	float targetX = mMainCamera.target.x + SpaceData::LengthX * 0.5f;
+	float targetZ = mMainCamera.target.z + SpaceData::LengthZ * 0.5f;
+	if (targetX >= SpaceData::LengthX) {
+		targetX -= SpaceData::LengthX;
+	}
+	if (targetZ >= SpaceData::LengthZ) {
+		targetZ -= SpaceData::LengthZ;
+	}
+	backgroundCamera.target = { targetX, 0.f, targetZ };
+	backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraOffset, 2.25f));
+
+	Rectangle backRect = { 0, 0, (float)mBackgroundTexture.texture.width, (float)-mBackgroundTexture.texture.height };
+
+	BeginTextureMode(mBackgroundTexture);
+	ClearBackground(BLANK);
+	BeginMode3D(backgroundCamera);
+	DrawToCurrentTarget(backgroundCamera, mRegistry);
 	EndMode3D();
+	EndTextureMode();
+
+	BeginDrawing();
+	ClearBackground(DARKGRAY);
+	DrawTextureRec(mBackgroundTexture.texture, backRect, Vector2Zero(), DARKBROWN);
+	BeginMode3D(mMainCamera);
+	DrawGrid(500, 5.0f);
+	DrawToCurrentTarget(mMainCamera, mRegistry);
+	EndMode3D();
+
 	DrawFPS(10, 10);
 	EndDrawing();
 }
