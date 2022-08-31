@@ -1,6 +1,8 @@
 #pragma once
 
 #include<stdint.h>
+
+#include "Data.h"
 #include "raylib.h"
 
 struct SteerComponent {
