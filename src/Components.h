@@ -46,3 +46,5 @@ struct ParticleComponent {
 struct BulletComponent {};
 
 struct ParticleDragComponent {};
+
+struct DestroyComponent {};

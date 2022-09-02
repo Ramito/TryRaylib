@@ -17,7 +17,7 @@ void Simulation::Init() {
 	mRegistry.emplace<SpaceshipInputComponent>(player, 0u, GameInput{ 0.f, 0.f, false });
 	mRegistry.emplace<SteerComponent>(player, 0.f);
 	mRegistry.emplace<ThrustComponent>(player, 0.f);
-	mRegistry.emplace<PositionComponent>(player, 0.f, 2.f, 0.f);
+	mRegistry.emplace<PositionComponent>(player, 0.f, 0.f, 0.f);
 	mRegistry.emplace<VelocityComponent>(player, 0.f, 0.f, 0.f);
 	mRegistry.emplace<OrientationComponent>(player, QuaternionIdentity());
 	mRegistry.emplace<GunComponent>(player, 0.f, 0u);
@@ -52,6 +52,10 @@ static void ProcessInput(entt::registry& registry, const std::array<GameInput, 4
 
 void Simulation::Simulate() {
 	constexpr float deltaTime = SimTimeData::DeltaTime;
+
+	for (auto entity : mRegistry.view<DestroyComponent>()) {
+		mRegistry.destroy(entity);
+	}
 
 	auto playerView = mRegistry.view<VelocityComponent, OrientationComponent, SteerComponent, SpaceshipInputComponent, ThrustComponent>();
 	auto playerProcess = [this](entt::entity entity,
@@ -342,6 +346,42 @@ void Simulation::Simulate() {
 		}
 	};
 	mSpatialPartition.IteratePairs(collisionHandler);
+
+	std::vector<entt::entity> iterated;
+	auto bulletView = mRegistry.view<BulletComponent, PositionComponent, VelocityComponent>();
+	auto bulletCollisionProcess =
+		[&](entt::entity bulletEntity, const PositionComponent& positionComponent, const VelocityComponent& velocityComponent) {
+		const Vector3& to = positionComponent.Position;
+		const Vector3 from = Vector3Add(to, Vector3Scale(velocityComponent.Velocity, -deltaTime));
+		const Vector3 trajectory = Vector3Subtract(to, from);
+		const float travelSq = Vector3LengthSqr(trajectory);
+		const float travel = sqrt(travelSq);
+
+		auto [minX, maxX] = std::minmax(from.x, to.x);
+		auto [minZ, maxZ] = std::minmax(from.z, to.z);
+
+		const Vector2 min = { minX, minZ };
+		const Vector2 max = { maxX, maxZ };
+
+		iterated.emplace_back(bulletEntity);
+
+		auto nearbyProcess = [&](entt::entity asteroid)
+		{
+			const Vector3& asteroidPosition = mRegistry.get<PositionComponent>(asteroid).Position;
+			const Vector3 asteroidFrom = Vector3Subtract(asteroidPosition, from);
+			const float projection = Vector3DotProduct(asteroidFrom, trajectory) / travelSq;
+			const Vector3 closest = Vector3Add(from, Vector3Scale(trajectory, std::clamp(projection, 0.f, 1.f)));
+			const float radius = mRegistry.get<AsteroidComponent>(asteroid).Radius;
+			if (Vector3DistanceSqr(closest, asteroidPosition) > radius * radius) {
+				return false;
+			}
+			mRegistry.emplace<DestroyComponent>(bulletEntity);
+			return true;
+		};
+
+		mSpatialPartition.IterateNearby(min, max, nearbyProcess);
+	};
+	bulletView.each(bulletCollisionProcess);
 }
 
 void Simulation::Tick() {

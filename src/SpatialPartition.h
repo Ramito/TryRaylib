@@ -31,27 +31,24 @@ public:
 		assert(min.y <= max.y);
 
 		mPayloads.push_back(payload);
-		auto [minI, minJ] = CellIntCoords(min);
-		auto [maxI, maxJ] = CellIntCoords(max);
 
-		Area area = { minI, minJ, maxI, maxJ };
-
-		mInsertionAreas.push_back(area);
+		mInsertionAreas.push_back(ComputeArea(min, max));
 	}
 
 	void FlushInsertions() {
+		auto countAction = [this](uint32_t cellIt) {
+			uint32_t cellIndex = mSparseCells[cellIt];
+			bool exists = cellIndex < mPackedCells.size() && mPackedCells[cellIndex] == cellIt;
+			if (!exists) {
+				cellIndex = mPackedCells.size();
+				mSparseCells[cellIt] = cellIndex;
+				mPackedCells.push_back(cellIt);
+				mCellCounts.push_back(0);
+			}
+			mCellCounts[cellIndex]++;
+			return false;
+		};
 		for (const Area& area : mInsertionAreas) {
-			auto countAction = [this](uint32_t cellIt) {
-				uint32_t cellIndex = mSparseCells[cellIt];
-				bool exists = cellIndex < mPackedCells.size() && mPackedCells[cellIndex] == cellIt;
-				if (!exists) {
-					cellIndex = mPackedCells.size();
-					mSparseCells[cellIt] = cellIndex;
-					mPackedCells.push_back(cellIt);
-					mCellCounts.push_back(0);
-				}
-				mCellCounts[cellIndex]++;
-			};
 			IterateArea(area, countAction);
 		}
 
@@ -76,6 +73,7 @@ public:
 				const uint32_t insertIndex = mCellFirst[cellIndex] + mCellCounts[cellIndex];
 				mCellCounts[cellIndex] += 1;
 				mPartition[insertIndex] = payloadId;
+				return false;
 			};
 			IterateArea(area, insertAction);
 			++payloadId;
@@ -129,6 +127,40 @@ public:
 		}
 	}
 
+	template<typename TNearAction>
+	void IterateNearby(const Vector2& min, const Vector2& max, TNearAction&& nearAction) {
+		mNearbyPacked.clear();
+		mNearbySparse.resize(mPayloads.size());
+
+		const Area area = ComputeArea(min, max);
+
+		auto areaCellIteration = [&](uint32_t cellID) {
+			uint32_t cellIndex = mSparseCells[cellID];
+			bool cellExists = cellIndex < mPackedCells.size() && mPackedCells[cellIndex] == cellID;
+			if (!cellExists) {
+				return false;
+			}
+			const uint32_t cellFirst = mCellFirst[cellIndex];
+			const uint32_t cellCount = mCellCounts[cellIndex];
+			for (uint32_t it = cellFirst; it < cellFirst + cellCount; ++it) {
+				const uint32_t itemIndex = mPartition[it];
+				const uint32_t packedIndex = mNearbySparse[itemIndex];
+				bool alreadyIterated = packedIndex < mNearbyPacked.size() && mNearbyPacked[packedIndex] == itemIndex;
+				if (alreadyIterated) {
+					continue;
+				}
+				if (nearAction(mPayloads[itemIndex])) {
+					return true;
+				}
+				mNearbySparse[itemIndex] = mNearbyPacked.size();
+				mNearbyPacked.push_back(itemIndex);
+			}
+			return false;
+		};
+
+		IterateArea(area, areaCellIteration);
+	}
+
 private:
 	struct Area {
 		int MinI;
@@ -136,6 +168,13 @@ private:
 		int MaxI;
 		int MaxJ;
 	};
+
+	inline Area ComputeArea(const Vector2& min, const Vector2& max) {
+		auto [minI, minJ] = CellIntCoords(min);
+		auto [maxI, maxJ] = CellIntCoords(max);
+
+		return { minI, minJ, maxI, maxJ };
+	}
 
 	using IndexPair = std::pair<uint32_t, uint32_t>;
 	struct PairCompare {
@@ -167,7 +206,9 @@ private:
 		assert(area.MaxI >= 0 && area.MaxJ >= 0);
 		for (int j = area.MinJ; j <= area.MaxJ; ++j) {
 			for (int i = area.MinI; i <= area.MaxI; ++i) {
-				action(GetCellID(i, j));
+				if (action(GetCellID(i, j))) {
+					return;
+				}
 			}
 		}
 	}
@@ -186,4 +227,7 @@ private:
 
 	std::vector<IndexPair> mPairAccumulator;
 	std::vector<IndexPair> mPairAppend;
+
+	std::vector<uint32_t> mNearbyPacked;
+	std::vector<uint32_t> mNearbySparse;
 };
