@@ -3,6 +3,7 @@
 #include "Components.h"
 #include "Data.h"
 #include <raymath.h>
+#include <rlgl.h>
 
 constexpr Vector3 CameraOffset = { -10.f, 25.f, -10.f };
 
@@ -160,17 +161,26 @@ namespace {
 		}
 	}
 
-	void DrawBulletsToCurrentTarget(const Camera& camera, const entt::registry& registry, float radius) {
+	void DrawBulletsToCurrentTarget(const Camera& camera, const entt::registry& registry) {
 		const CameraFrustum frustum = ComputeFrustum(camera);
+
+		BeginBlendMode(BLEND_ALPHA);
+		rlDisableDepthMask();
 
 		for (entt::entity particle : registry.view<BulletComponent>()) {
 			for (const Vector3& offset : SpaceOffsets) {
 				const Vector3 position = Vector3Add(registry.get<PositionComponent>(particle).Position, offset);
 				if (PositionRadiusInsideFrustum(frustum, position, 0.f)) {
-					DrawSphere(position, radius, GREEN);
+					// Ghetto bloom
+					DrawSphere(position, 0.05f, WHITE);
+					DrawSphere(position, 0.12f, GREEN);
+					DrawSphere(position, 0.175f, { 0, 228, 48, 180 });
+					DrawSphere(position, 1.f, { 0, 228, 48, 80 });
 				}
 			}
 		}
+
+		rlEnableDepthMask();
 
 	}
 }
@@ -205,6 +215,14 @@ void Render::Draw() {
 
 	Rectangle sourceRect = { 0, 0, (float)width, (float)height };	// TODO: Name makes no sense?
 
+	BeginTextureMode(mBulletTexture);
+	ClearBackground(BLANK);
+	BeginMode3D(backgroundCamera);
+	DrawBulletsToCurrentTarget(backgroundCamera, mRegistry);
+	EndBlendMode();
+	EndMode3D();
+	EndTextureMode();
+
 	BeginTextureMode(mBackgroundTexture);
 	ClearBackground(BLANK);
 	BeginMode3D(backgroundCamera);
@@ -213,9 +231,9 @@ void Render::Draw() {
 	EndTextureMode();
 
 	BeginTextureMode(mBulletTexture);
-	ClearBackground(BLANK);
 	BeginMode3D(mMainCamera);
-	DrawBulletsToCurrentTarget(mMainCamera, mRegistry, 0.25f);
+	DrawBulletsToCurrentTarget(mMainCamera, mRegistry);
+	EndBlendMode();
 	EndMode3D();
 	EndTextureMode();
 
@@ -226,7 +244,9 @@ void Render::Draw() {
 	DrawGrid(500, 5.0f);
 	DrawToCurrentTarget(mMainCamera, mRegistry);
 	EndMode3D();
+	BeginBlendMode(BLEND_ADDITIVE);
 	DrawTextureRec(mBulletTexture.texture, targetRect, Vector2Zero(), WHITE);
+	EndBlendMode();
 
 	DrawFPS(10, 10);
 	EndDrawing();
