@@ -42,3 +42,7 @@ struct AsteroidComponent {
 struct ParticleComponent {
 	uint32_t LifeTime;
 };
+
+struct BulletComponent {};
+
+struct ParticleDragComponent {};

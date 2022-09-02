@@ -76,7 +76,6 @@ void main() {
 	renderDependencies.AddDependency(gameCameras);
 
 	Render render(0, renderDependencies);	// Renderer for player 0
-	render.Init();
 
 	double gameStartTime = GetTime();
 	uint32_t simTicks = 0;

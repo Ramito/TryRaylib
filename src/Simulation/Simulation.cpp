@@ -186,6 +186,7 @@ void Simulation::Simulate() {
 			Vector3 shotPosition = Vector3Add(positionComponent.Position, offset);
 			Vector3 shotVelocity = Vector3Add(velocityComponent.Velocity, Vector3Scale(forward, WeaponData::BulletSpeed));
 			entt::entity bullet = mRegistry.create();
+			mRegistry.emplace<BulletComponent>(bullet);
 			mRegistry.emplace<PositionComponent>(bullet, shotPosition);
 			mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Quaternion);
 			mRegistry.emplace<VelocityComponent>(bullet, shotVelocity);
@@ -216,6 +217,7 @@ void Simulation::Simulate() {
 
 			while (particles-- > 0) {
 				entt::entity particleEntity = mRegistry.create();
+				mRegistry.emplace<ParticleDragComponent>(particleEntity);
 				mRegistry.emplace<PositionComponent>(particleEntity, Vector3Add(positionComponent.Position, Vector3Scale(back, Offset)));
 				float randX = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
 				float randY = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
@@ -228,28 +230,26 @@ void Simulation::Simulate() {
 	};
 	thrustView.each(thrustParticleProcess);
 
-	auto particleView = mRegistry.view<ParticleComponent, VelocityComponent>();
-	auto particleProcess = [deltaTime, this](entt::entity particle,
-		ParticleComponent& particleComponent,
-		VelocityComponent& velocityComponent) {
+	auto particleView = mRegistry.view<ParticleComponent>();
+	auto particleLifetimeProcess = [this](entt::entity particle,
+		ParticleComponent& particleComponent) {
 			if (particleComponent.LifeTime == 0) {
 				mRegistry.destroy(particle);
 				return;
 			}
 			particleComponent.LifeTime--;
-
-			if (mRegistry.any_of<OrientationComponent>(particle)) {
-				// It's a bullet!
-				return;
-			}
-
-			float speed = Vector3Length(velocityComponent.Velocity);
-			if (!FloatEquals(speed, 0.f)) {
-				float drag = speed * ParticleData::LinearDrag + speed * speed * ParticleData::QuadraticDrag;
-				velocityComponent.Velocity = Vector3Add(velocityComponent.Velocity, Vector3Scale(velocityComponent.Velocity, -drag / speed));
-			}
 	};
-	particleView.each(particleProcess);
+	particleView.each(particleLifetimeProcess);
+
+	auto particleDragView = mRegistry.view<ParticleDragComponent, VelocityComponent>();
+	auto particleDragProcess = [](VelocityComponent& velocityComponent) {
+		float speed = Vector3Length(velocityComponent.Velocity);
+		if (!FloatEquals(speed, 0.f)) {
+			float drag = speed * ParticleData::LinearDrag + speed * speed * ParticleData::QuadraticDrag;
+			velocityComponent.Velocity = Vector3Add(velocityComponent.Velocity, Vector3Scale(velocityComponent.Velocity, -drag / speed));
+		}
+	};
+	particleDragView.each(particleDragProcess);
 
 	auto dynamicView = mRegistry.view<PositionComponent, VelocityComponent>();
 	auto dynamicProcess = [](PositionComponent& positionComponent, const VelocityComponent& velocityComponent) {

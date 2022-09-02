@@ -13,11 +13,12 @@ using RenderDependencies = DependencyContainer<RenderFlag>;
 class Render {
 public:
 	Render(uint32_t viewID, RenderDependencies& dependencies);
-	void Init();
+	~Render();
 	void Draw();
 private:
 	uint32_t mViewID;
 	entt::registry& mRegistry;
 	Camera& mMainCamera;
 	RenderTexture mBackgroundTexture;
+	RenderTexture mBulletTexture;
 };

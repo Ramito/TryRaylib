@@ -10,9 +10,6 @@ Render::Render(uint32_t viewID, RenderDependencies& dependencies) : mViewID(view
 , mRegistry(dependencies.GetDependency<entt::registry>())
 , mMainCamera(dependencies.GetDependency<GameCameras>()[viewID])
 {
-}
-
-void Render::Init() {
 	mMainCamera.target = { 0.f, 0.f, 0.f };
 	mMainCamera.position = Vector3Negate(CameraOffset);
 	mMainCamera.projection = CAMERA_PERSPECTIVE;
@@ -20,7 +17,17 @@ void Render::Init() {
 	mMainCamera.fovy = 70.f;
 	SetCameraMode(mMainCamera, CAMERA_CUSTOM);
 
-	mBackgroundTexture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+	int width = GetScreenWidth();
+	int height = GetScreenHeight();
+
+	mBackgroundTexture = LoadRenderTexture(width, height);
+
+	mBulletTexture = LoadRenderTexture(width, height);
+}
+
+Render::~Render() {
+	UnloadRenderTexture(mBackgroundTexture);
+	UnloadRenderTexture(mBulletTexture);
 }
 
 static void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
@@ -73,13 +80,18 @@ namespace {
 			Vector3{-SpaceData::LengthX,0.f,-SpaceData::LengthZ}
 	};
 
-	void DrawToCurrentTarget(const Camera& camera, const entt::registry& registry) {
-		for (auto entity : registry.view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
-			auto& position = registry.get<PositionComponent>(entity);
-			auto& orientation = registry.get<OrientationComponent>(entity);
-			DrawSpaceShip(position.Position, orientation.Quaternion);
-		}
+	struct CameraFrustum {
+		float TopSupport;
+		Vector3 TopNormal;
+		float LeftSupport;
+		Vector3 LeftNormal;
+		float BottomSupport;
+		Vector3 BottomNormal;
+		float RightSupport;
+		Vector3 RightNormal;
+	};
 
+	CameraFrustum ComputeFrustum(const Camera camera) {
 		const float screenW = GetScreenWidth();
 		const float screenH = GetScreenHeight();
 
@@ -99,44 +111,67 @@ namespace {
 		float bottomAnchor = Vector3DotProduct(bottomNormal, anchor);
 		float rightAnchor = Vector3DotProduct(rightNormal, anchor);
 
+		return { topAnchor, topNormal, leftAnchor, leftNormal, bottomAnchor, bottomNormal, rightAnchor, rightNormal };
+	}
+
+	inline bool PositionRadiusInsideFrustum(const CameraFrustum& frustum, const Vector3& position, float radius) {
+		float topSupport = Vector3DotProduct(frustum.TopNormal, position) - radius;
+		float leftSupport = Vector3DotProduct(frustum.LeftNormal, position) - radius;
+		float bottomSupport = Vector3DotProduct(frustum.BottomNormal, position) - radius;
+		float rightSupport = Vector3DotProduct(frustum.RightNormal, position) - radius;
+
+		return topSupport <= frustum.TopSupport
+			&& leftSupport <= frustum.LeftSupport
+			&& bottomSupport <= frustum.BottomSupport
+			&& rightSupport <= frustum.RightSupport;
+	}
+
+	void DrawToCurrentTarget(const Camera& camera, const entt::registry& registry) {
+		const CameraFrustum frustum = ComputeFrustum(camera);
+
+		for (auto entity : registry.view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
+			auto& position = registry.get<PositionComponent>(entity);
+			auto& orientation = registry.get<OrientationComponent>(entity);
+			if (PositionRadiusInsideFrustum(frustum, position.Position, 0.f)) {
+				// TODO: Spaceship bound radius!
+				DrawSpaceShip(position.Position, orientation.Quaternion);
+			}
+		}
+
 		for (auto asteroid : registry.view<AsteroidComponent>()) {
 			for (const Vector3& offset : SpaceOffsets) {
 				const Vector3 position = Vector3Add(registry.get<PositionComponent>(asteroid).Position, offset);
 				const float radius = registry.get<AsteroidComponent>(asteroid).Radius;
 
-				float topSupport = Vector3DotProduct(topNormal, position) - radius;
-				float leftSupport = Vector3DotProduct(leftNormal, position) - radius;
-				float bottomSupport = Vector3DotProduct(bottomNormal, position) - radius;
-				float rightSupport = Vector3DotProduct(rightNormal, position) - radius;
-
-				if (topSupport <= topAnchor && leftSupport <= leftAnchor && bottomSupport <= bottomAnchor && rightSupport <= rightAnchor) {
+				if (PositionRadiusInsideFrustum(frustum, position, radius)) {
 					DrawSphereWires(position, radius, 8, 8, YELLOW);
 					break;
 				}
 			}
 		}
 
-		for (entt::entity particle : registry.view<ParticleComponent>()) {
+		for (entt::entity particle : registry.view<ParticleComponent>(entt::exclude<BulletComponent>)) {
 			for (const Vector3& offset : SpaceOffsets) {
 				const Vector3 position = Vector3Add(registry.get<PositionComponent>(particle).Position, offset);
-
-				float topSupport = Vector3DotProduct(topNormal, position);
-				float leftSupport = Vector3DotProduct(leftNormal, position);
-				float bottomSupport = Vector3DotProduct(bottomNormal, position);
-				float rightSupport = Vector3DotProduct(rightNormal, position);
-
-				if (topSupport <= topAnchor && leftSupport <= leftAnchor && bottomSupport <= bottomAnchor && rightSupport <= rightAnchor) {
-					if (!registry.any_of<OrientationComponent>(particle))
-					{
-						DrawPoint3D(position, ORANGE);
-					}
-					else {
-						DrawSphere(position, 0.2f, GREEN);
-					}
-					break;
+				if (PositionRadiusInsideFrustum(frustum, position, 0.f)) {
+					DrawPoint3D(position, ORANGE);
 				}
 			}
 		}
+	}
+
+	void DrawBulletsToCurrentTarget(const Camera& camera, const entt::registry& registry, float radius) {
+		const CameraFrustum frustum = ComputeFrustum(camera);
+
+		for (entt::entity particle : registry.view<BulletComponent>()) {
+			for (const Vector3& offset : SpaceOffsets) {
+				const Vector3 position = Vector3Add(registry.get<PositionComponent>(particle).Position, offset);
+				if (PositionRadiusInsideFrustum(frustum, position, 0.f)) {
+					DrawSphere(position, radius, GREEN);
+				}
+			}
+		}
+
 	}
 }
 
@@ -164,7 +199,11 @@ void Render::Draw() {
 	backgroundCamera.target = { targetX, 0.f, targetZ };
 	backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraOffset, 2.25f));
 
-	Rectangle backRect = { 0, 0, (float)mBackgroundTexture.texture.width, (float)-mBackgroundTexture.texture.height };
+	int width = GetScreenWidth();
+	int height = GetScreenHeight();
+	Rectangle targetRect = { 0, 0, (float)width, (float)-height };
+
+	Rectangle sourceRect = { 0, 0, (float)width, (float)height };	// TODO: Name makes no sense?
 
 	BeginTextureMode(mBackgroundTexture);
 	ClearBackground(BLANK);
@@ -173,13 +212,21 @@ void Render::Draw() {
 	EndMode3D();
 	EndTextureMode();
 
+	BeginTextureMode(mBulletTexture);
+	ClearBackground(BLANK);
+	BeginMode3D(mMainCamera);
+	DrawBulletsToCurrentTarget(mMainCamera, mRegistry, 0.25f);
+	EndMode3D();
+	EndTextureMode();
+
 	BeginDrawing();
 	ClearBackground(DARKGRAY);
-	DrawTextureRec(mBackgroundTexture.texture, backRect, Vector2Zero(), DARKBROWN);
+	DrawTextureRec(mBackgroundTexture.texture, targetRect, Vector2Zero(), DARKBROWN);
 	BeginMode3D(mMainCamera);
 	DrawGrid(500, 5.0f);
 	DrawToCurrentTarget(mMainCamera, mRegistry);
 	EndMode3D();
+	DrawTextureRec(mBulletTexture.texture, targetRect, Vector2Zero(), WHITE);
 
 	DrawFPS(10, 10);
 	EndDrawing();
