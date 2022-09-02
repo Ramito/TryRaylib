@@ -174,11 +174,11 @@ void Simulation::Simulate() {
 		const OrientationComponent& orientationComponent,
 		const SpaceshipInputComponent& inputComponent,
 		GunComponent& gunComponent) {
-			gunComponent.TimeBeforeNextShot = std::max(gunComponent.TimeBeforeNextShot - deltaTime, 0.f);
+			gunComponent.TimeSinceLastShot += deltaTime;
 			if (!inputComponent.Input.Fire) {
 				return;
 			}
-			if (gunComponent.TimeBeforeNextShot > 0.f) {
+			if (gunComponent.TimeSinceLastShot < WeaponData::RateOfFire) {
 				return;
 			}
 			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
@@ -190,10 +190,10 @@ void Simulation::Simulate() {
 			mRegistry.emplace<PositionComponent>(bullet, shotPosition);
 			mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Quaternion);
 			mRegistry.emplace<VelocityComponent>(bullet, shotVelocity);
-			mRegistry.emplace<ParticleComponent>(bullet, static_cast<uint32_t>(WeaponData::BulletLifetime / SimTimeData::DeltaTime));
+			mRegistry.emplace<ParticleComponent>(bullet, WeaponData::BulletLifetime);
 			gunComponent.NextShotBone += 1;
 			gunComponent.NextShotBone %= WeaponData::ShootBones.size();
-			gunComponent.TimeBeforeNextShot = WeaponData::RateOfFire;
+			gunComponent.TimeSinceLastShot = 0.f;
 
 	};
 	shootView.each(shootProcess);
@@ -224,7 +224,7 @@ void Simulation::Simulate() {
 				float randZ = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
 				Vector3 randomVelocity = Vector3Scale({ randX, randY, randZ }, RandomModule);
 				mRegistry.emplace<VelocityComponent>(particleEntity, Vector3Add(baseVelocity, randomVelocity));
-				uint32_t lifetime = (std::rand() + std::rand()) / (2 * RAND_MAX / 1250);
+				float lifetime = ((std::rand() + std::rand()) / (2 * RAND_MAX / 1250)) * deltaTime;
 				mRegistry.emplace<ParticleComponent>(particleEntity, lifetime);
 			}
 	};
@@ -233,11 +233,11 @@ void Simulation::Simulate() {
 	auto particleView = mRegistry.view<ParticleComponent>();
 	auto particleLifetimeProcess = [this](entt::entity particle,
 		ParticleComponent& particleComponent) {
-			if (particleComponent.LifeTime == 0) {
+			if (particleComponent.LifeTime <= 0.f) {
 				mRegistry.destroy(particle);
 				return;
 			}
-			particleComponent.LifeTime--;
+			particleComponent.LifeTime -= deltaTime;
 	};
 	particleView.each(particleLifetimeProcess);
 

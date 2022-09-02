@@ -10,7 +10,7 @@ struct SteerComponent {
 };
 
 struct GunComponent {
-	float TimeBeforeNextShot;
+	float TimeSinceLastShot;
 	uint32_t NextShotBone;
 };
 
@@ -40,7 +40,7 @@ struct AsteroidComponent {
 };
 
 struct ParticleComponent {
-	uint32_t LifeTime;
+	float LifeTime;
 };
 
 struct BulletComponent {};
