@@ -295,30 +295,34 @@ void Simulation::Simulate() {
 
 	mSpatialPartition.FlushInsertions();
 
-	auto collisionHandler = [this](entt::entity asteroid1, entt::entity asteroid2) {
+	auto findCoordinateGap = [](float coord1, float coord2, float mod) {
+		float coordGap = coord2 - coord1;
+		if (abs(coordGap + mod) < abs(coordGap)) {
+			return coordGap + mod;
+		}
+		else if (abs(coordGap - mod) < abs(coordGap)) {
+			return coordGap - mod;
+		}
+		return coordGap;
+	};
+
+	auto findVectorGap = [findCoordinateGap](const Vector3& from, const Vector3& to) {
+		const float x1 = from.x;
+		const float x2 = to.x;
+		const float gapX = findCoordinateGap(x1, x2, SpaceData::LengthX);
+
+		const float z1 = from.z;
+		const float z2 = to.z;
+		const float gapZ = findCoordinateGap(z1, z2, SpaceData::LengthZ);
+
+		return Vector3{ gapX, to.y - from.y, gapZ };
+	};
+
+	auto collisionHandler = [&](entt::entity asteroid1, entt::entity asteroid2) {
 		const Vector3& position1 = mRegistry.get<PositionComponent>(asteroid1).Position;
 		const Vector3& position2 = mRegistry.get<PositionComponent>(asteroid2).Position;
 
-		auto findGap = [](float coord1, float coord2, float mod) {
-			float coordGap = coord2 - coord1;
-			if (abs(coordGap + mod) < abs(coordGap)) {
-				return coordGap + mod;
-			}
-			else if (abs(coordGap - mod) < abs(coordGap)) {
-				return coordGap - mod;
-			}
-			return coordGap;
-		};
-
-		const float x1 = position1.x;
-		const float x2 = position2.x;
-		const float gapX = findGap(x1, x2, SpaceData::LengthX);
-
-		const float z1 = position1.z;
-		const float z2 = position2.z;
-		const float gapZ = findGap(z1, z2, SpaceData::LengthZ);
-
-		const Vector3 gap = { gapX, position2.y - position1.y, gapZ };
+		const Vector3 gap = findVectorGap(position1, position2);
 
 		Vector3& velocity1 = mRegistry.get<VelocityComponent>(asteroid1).Velocity;
 		Vector3& velocity2 = mRegistry.get<VelocityComponent>(asteroid2).Velocity;
@@ -334,7 +338,7 @@ void Simulation::Simulate() {
 		float radius2 = mRegistry.get<AsteroidComponent>(asteroid2).Radius;
 		float minDistance = radius1 + radius2;
 
-		float distanceSq = gapX * gapX + gapZ * gapZ;
+		float distanceSq = gap.x * gap.x + gap.z * gap.z;
 		if (distanceSq < minDistance * minDistance) {
 			const float mass1 = radius1 * radius1 * radius1;
 			const float mass2 = radius2 * radius2 * radius2;
@@ -368,11 +372,12 @@ void Simulation::Simulate() {
 		auto nearbyProcess = [&](entt::entity asteroid)
 		{
 			const Vector3& asteroidPosition = mRegistry.get<PositionComponent>(asteroid).Position;
-			const Vector3 asteroidFrom = Vector3Subtract(asteroidPosition, from);
+			const Vector3 asteroidFrom = findVectorGap(from, asteroidPosition);
+
 			const float projection = Vector3DotProduct(asteroidFrom, trajectory) / travelSq;
 			const Vector3 closest = Vector3Add(from, Vector3Scale(trajectory, std::clamp(projection, 0.f, 1.f)));
 			const float radius = mRegistry.get<AsteroidComponent>(asteroid).Radius;
-			if (Vector3DistanceSqr(closest, asteroidPosition) > radius * radius) {
+			if (Vector3DistanceSqr(closest, Vector3Add(from, asteroidFrom)) > radius * radius) {
 				return false;
 			}
 			mRegistry.emplace<DestroyComponent>(bulletEntity);
