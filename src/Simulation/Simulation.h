@@ -4,6 +4,7 @@
 #include "DependencyContainer.h"
 #include "Data.h"
 #include "SpatialPartition.h"
+#include <random>
 
 struct SimFlag {};
 using SimDependencies = DependencyContainer<SimFlag>;
@@ -21,4 +22,6 @@ private:
 	entt::registry& mRegistry;
 	const std::array<GameInput, 4>& mGameInput;
 	SpatialPartition<entt::entity> mSpatialPartition;
+
+	std::default_random_engine mRandomGenerator;
 };

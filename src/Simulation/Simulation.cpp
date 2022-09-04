@@ -2,11 +2,20 @@
 
 #include "Components.h"
 #include <raymath.h>
-#include <random>
+
+static std::uniform_real_distribution<float> UniformDistribution(0.f, 1.f);
+static std::uniform_real_distribution<float> DirectionDistribution(0.f, 2.f * PI);
 
 Simulation::Simulation(const SimDependencies& dependencies) : mRegistry(dependencies.GetDependency<entt::registry>()),
 mGameInput(dependencies.GetDependency<std::remove_reference<decltype(mGameInput)>::type>())
 {
+}
+
+static void MakeAsteroid(entt::registry& registry, float radius, const Vector3 position, const Vector3 velocity) {
+	entt::entity asteroid = registry.create();
+	registry.emplace<AsteroidComponent>(asteroid, radius);
+	registry.emplace<PositionComponent>(asteroid, position);
+	registry.emplace<VelocityComponent>(asteroid, velocity);
 }
 
 void Simulation::Init() {
@@ -22,19 +31,16 @@ void Simulation::Init() {
 	mRegistry.emplace<OrientationComponent>(player, QuaternionIdentity());
 	mRegistry.emplace<GunComponent>(player, 0.f, 0u);
 
-	std::default_random_engine randomGenerator;
 	std::uniform_real_distribution<float> xDistribution(0.f, SpaceData::LengthX);
 	std::uniform_real_distribution<float> zDistribution(0.f, SpaceData::LengthZ);
 	std::uniform_real_distribution<float> speedDistribution(0.f, 2.f * SpaceData::AsteroidDriftSpeed);
-	std::uniform_real_distribution<float> directionDistribution(0.f, 2.f * PI);
 	std::uniform_real_distribution<float> radiusDistribution(SpaceData::MinAsteroidRadius, SpaceData::MaxAsteroidRadius);
 	for (int i = 0; i < SpaceData::AsteroidsCount; ++i) {
-		entt::entity asteroid = mRegistry.create();
-		mRegistry.emplace<AsteroidComponent>(asteroid, radiusDistribution(randomGenerator));
-		mRegistry.emplace<PositionComponent>(asteroid, xDistribution(randomGenerator), 0.f, zDistribution(randomGenerator));
-		float angle = directionDistribution(randomGenerator);
-		float speed = speedDistribution(randomGenerator);
-		mRegistry.emplace<VelocityComponent>(asteroid, Vector3{ cos(angle) * speed, 0.f, sin(angle) * speed });
+		float angle = DirectionDistribution(mRandomGenerator);
+		float speed = speedDistribution(mRandomGenerator);
+		MakeAsteroid(mRegistry, radiusDistribution(mRandomGenerator)
+			, { xDistribution(mRandomGenerator), 0.f, zDistribution(mRandomGenerator) },
+			{ cos(angle) * speed, 0.f, sin(angle) * speed });
 	}
 
 	mSpatialPartition.InitArea({ SpaceData::LengthX, SpaceData::LengthZ }, SpaceData::CellCountX, SpaceData::CellCountZ);
@@ -354,39 +360,77 @@ void Simulation::Simulate() {
 	std::vector<entt::entity> iterated;
 	auto bulletView = mRegistry.view<BulletComponent, PositionComponent, VelocityComponent>();
 	auto bulletCollisionProcess =
-		[&](entt::entity bulletEntity, const PositionComponent& positionComponent, const VelocityComponent& velocityComponent) {
+		[&](entt::entity bulletEntity, PositionComponent& positionComponent, VelocityComponent& velocityComponent) {
 		const Vector3& to = positionComponent.Position;
 		const Vector3 from = Vector3Add(to, Vector3Scale(velocityComponent.Velocity, -deltaTime));
-		const Vector3 trajectory = Vector3Subtract(to, from);
-		const float travelSq = Vector3LengthSqr(trajectory);
-		const float travel = sqrt(travelSq);
-
-		auto [minX, maxX] = std::minmax(from.x, to.x);
-		auto [minZ, maxZ] = std::minmax(from.z, to.z);
-
-		const Vector2 min = { minX, minZ };
-		const Vector2 max = { maxX, maxZ };
 
 		iterated.emplace_back(bulletEntity);
 
 		auto nearbyProcess = [&](entt::entity asteroid)
 		{
-			const Vector3& asteroidPosition = mRegistry.get<PositionComponent>(asteroid).Position;
-			const Vector3 asteroidFrom = findVectorGap(from, asteroidPosition);
+			const Vector3& asteroidVelocity = mRegistry.get<VelocityComponent>(asteroid).Velocity;
+			const Vector3 impactVelocity = Vector3Subtract(velocityComponent.Velocity, asteroidVelocity);
 
-			const float projection = Vector3DotProduct(asteroidFrom, trajectory) / travelSq;
-			const Vector3 closest = Vector3Add(from, Vector3Scale(trajectory, std::clamp(projection, 0.f, 1.f)));
-			const float radius = mRegistry.get<AsteroidComponent>(asteroid).Radius;
-			if (Vector3DistanceSqr(closest, Vector3Add(from, asteroidFrom)) > radius * radius) {
+			const Vector3& asteroidPosition = mRegistry.get<PositionComponent>(asteroid).Position;
+			const Vector3 toAsteroid = findVectorGap(to, asteroidPosition);
+
+			if (Vector3DotProduct(impactVelocity, toAsteroid) <= 0.f) {
 				return false;
 			}
-			mRegistry.emplace<DestroyComponent>(bulletEntity);
+
+			const float radius = mRegistry.get<AsteroidComponent>(asteroid).Radius;
+			const float distanceSqr = Vector3LengthSqr(toAsteroid);
+			if (distanceSqr > radius * radius) {
+				return false;
+			}
+
+			const Vector3 impactDirection = Vector3Normalize(impactVelocity);
+			const Vector3 normalizedToAsteroid = Vector3Normalize(toAsteroid);
+
+			const float cos = Vector3DotProduct(Vector3Normalize(impactDirection), Vector3Normalize(normalizedToAsteroid));
+
+			if (cos < 0.6f) {
+				const Vector3 bounceVelocity = Vector3Subtract(velocityComponent.Velocity, Vector3Scale(normalizedToAsteroid, 2.f * cos * WeaponData::BulletSpeed));
+				velocityComponent.Velocity = Vector3Scale(bounceVelocity, 0.9f);
+			}
+			else {
+				mRegistry.get_or_emplace<HitAsteroidComponent>(asteroid, std::clamp(cos, 0.f, 1.f));
+				mRegistry.emplace<DestroyComponent>(bulletEntity);
+			}
 			return true;
 		};
 
-		mSpatialPartition.IterateNearby(min, max, nearbyProcess);
+		const Vector2 flatTo = { to.x, to.z };
+		mSpatialPartition.IterateNearby(flatTo, flatTo, nearbyProcess);
 	};
 	bulletView.each(bulletCollisionProcess);
+
+	auto hitAsteroidView = mRegistry.view<AsteroidComponent, HitAsteroidComponent>();
+	auto hitAsteroidProcess = [&](entt::entity asteroid, const AsteroidComponent& asteroidComponent, const HitAsteroidComponent& hitComponent) {
+		if (UniformDistribution(mRandomGenerator) >= 0.15f * hitComponent.HitCos) {
+			return;
+		}
+		const float radius = asteroidComponent.Radius;
+		const float breakRadius = 0.5f * radius;
+		if (breakRadius > SpaceData::MinAsteroidRadius * 0.5f) {
+			const Vector3& position = mRegistry.get<PositionComponent>(asteroid).Position;
+			const Vector3& velocity = mRegistry.get<VelocityComponent>(asteroid).Velocity;
+
+
+			const float axisAngle = DirectionDistribution(mRandomGenerator);
+			const Vector3 axis = { cos(axisAngle), 0.f, sin(axisAngle) };
+
+			const float randomSpeedAngle = DirectionDistribution(mRandomGenerator);
+			const Vector3 speedDrift = { cos(axisAngle), 0.f, sin(axisAngle) };
+
+			MakeAsteroid(mRegistry, breakRadius, Vector3Add(position, Vector3Scale(axis, breakRadius)), Vector3Add(velocity, speedDrift));
+			MakeAsteroid(mRegistry, radius - breakRadius, Vector3Subtract(position, Vector3Scale(axis, radius - breakRadius)), Vector3Subtract(velocity, speedDrift));
+		}
+		mRegistry.emplace<DestroyComponent>(asteroid);
+	};
+	hitAsteroidView.each(hitAsteroidProcess);
+
+	mRegistry.clear<HitAsteroidComponent>();
 }
 
 void Simulation::Tick() {

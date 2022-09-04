@@ -48,3 +48,7 @@ struct BulletComponent {};
 struct ParticleDragComponent {};
 
 struct DestroyComponent {};
+
+struct HitAsteroidComponent {
+	float HitCos;
+};

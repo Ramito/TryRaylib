@@ -26,10 +26,10 @@ namespace SpaceData {
 	constexpr float MinAsteroidRadius = 1.25f;
 	constexpr float MaxAsteroidRadius = 4.5f;
 	constexpr float AsteroidDriftSpeed = 3.f;
-	constexpr float LengthX = 400.f;
-	constexpr float LengthZ = 200.f;
-	constexpr int CellCountX = 120;
-	constexpr int CellCountZ = 40;
+	constexpr float LengthX = 300.f;
+	constexpr float LengthZ = 300.f;
+	constexpr int CellCountX = 30;
+	constexpr int CellCountZ = 30;
 }
 
 namespace SpaceshipData {
