@@ -50,10 +50,10 @@ namespace SpaceshipData {
 }
 
 namespace WeaponData {
-	constexpr float RateOfFire = 0.125f;
-	constexpr float BulletSpeed = 75.f;
-	constexpr float BulletLifetime = 1.f;
-	constexpr std::array<Vector3, 2> ShootBones = { Vector3 { 0.65f, 0.f, 0.f }, Vector3 { -0.65f, 0.f, 0.f } };
+	constexpr float RateOfFire = 0.1f;
+	constexpr float BulletSpeed = 72.5f;
+	constexpr float BulletLifetime = 1.2f;
+	constexpr std::array<Vector3, 4> ShootBones = { Vector3 { 0.6f, 0.25f, 0.f }, Vector3 { -0.6f, 0.25f, 0.f }, Vector3 { 0.6f, -0.25f, 0.f }, Vector3 { -0.6f, -0.25f, 0.f } };
 }
 
 namespace ParticleData {

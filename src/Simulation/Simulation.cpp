@@ -389,9 +389,9 @@ void Simulation::Simulate() {
 
 			const float cos = Vector3DotProduct(Vector3Normalize(impactDirection), Vector3Normalize(normalizedToAsteroid));
 
-			if (cos < 0.6f) {
+			if (cos < 0.575f) {
 				const Vector3 bounceVelocity = Vector3Subtract(velocityComponent.Velocity, Vector3Scale(normalizedToAsteroid, 2.f * cos * WeaponData::BulletSpeed));
-				velocityComponent.Velocity = Vector3Scale(bounceVelocity, 0.9f);
+				velocityComponent.Velocity = Vector3Scale(bounceVelocity, 0.5f);
 			}
 			else {
 				mRegistry.get_or_emplace<HitAsteroidComponent>(asteroid, std::clamp(cos, 0.f, 1.f));
@@ -407,10 +407,14 @@ void Simulation::Simulate() {
 
 	auto hitAsteroidView = mRegistry.view<AsteroidComponent, HitAsteroidComponent>();
 	auto hitAsteroidProcess = [&](entt::entity asteroid, const AsteroidComponent& asteroidComponent, const HitAsteroidComponent& hitComponent) {
-		if (UniformDistribution(mRandomGenerator) >= 0.15f * hitComponent.HitCos) {
+		const float radius = asteroidComponent.Radius;
+		const float relativeRadius = (radius - SpaceData::MinAsteroidRadius) / (SpaceData::MaxAsteroidRadius - SpaceData::MinAsteroidRadius);
+		constexpr float MinDestroyChance = 0.075f;
+		constexpr float MaxDestroyChance = 0.25f;
+		const float destroyChance = sqrt(std::clamp(relativeRadius, 0.f, 1.f)) * (MinDestroyChance - MaxDestroyChance) + MaxDestroyChance;
+		if (UniformDistribution(mRandomGenerator) >= destroyChance * hitComponent.HitCos) {
 			return;
 		}
-		const float radius = asteroidComponent.Radius;
 		const float breakRadius = 0.5f * radius;
 		if (breakRadius > SpaceData::MinAsteroidRadius * 0.5f) {
 			const Vector3& position = mRegistry.get<PositionComponent>(asteroid).Position;
