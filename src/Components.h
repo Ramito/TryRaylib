@@ -52,3 +52,8 @@ struct DestroyComponent {};
 struct HitAsteroidComponent {
 	float HitCos;
 };
+
+struct RespawnComponent {
+	uint32_t InputId;
+	float TimeLeft;
+};

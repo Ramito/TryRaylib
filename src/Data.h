@@ -21,6 +21,10 @@ namespace SimTimeData {
 	constexpr float DeltaTime = 1.f / TargetFPS;
 }
 
+namespace GameData {
+	constexpr float RespawnTimer = 2.f;
+}
+
 namespace SpaceData {
 	constexpr uint32_t AsteroidsCount = 250;
 	constexpr float MinAsteroidRadius = 1.25f;
@@ -45,8 +49,10 @@ namespace SpaceshipData {
 	constexpr float NegativePitch = 1.25f;
 	constexpr float NegativeRoll = 2.75f;
 
-	constexpr float SteerB = 0.25f;
-	constexpr float SteerM = 1.5f;
+	constexpr float SteerB = 0.225f;
+	constexpr float SteerM = 1.45f;
+
+	constexpr float CollisionRadius = 0.75f;
 }
 
 namespace WeaponData {
