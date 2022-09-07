@@ -371,22 +371,15 @@ void Simulation::Simulate() {
 	};
 	mSpatialPartition.IteratePairs(collisionHandler);
 
-	std::vector<entt::entity> iterated;
-	auto bulletView = mRegistry.view<BulletComponent, PositionComponent, VelocityComponent>();
-	auto bulletCollisionProcess =
-		[&](entt::entity bulletEntity, PositionComponent& positionComponent, VelocityComponent& velocityComponent) {
-		const Vector3& to = positionComponent.Position;
-		const Vector3 from = Vector3Add(to, Vector3Scale(velocityComponent.Velocity, -deltaTime));
-
-		iterated.emplace_back(bulletEntity);
-
-		auto nearbyProcess = [&](entt::entity asteroid)
-		{
+	auto particleCollisionView = mRegistry.view<ParticleComponent, PositionComponent, VelocityComponent>();
+	auto particleCollisionProcess = [&](entt::entity particle, const ParticleComponent&, const PositionComponent& positionComponent, VelocityComponent& velocityComponent)
+	{
+		auto particleCollisionHandler = [&](entt::entity asteroid) {
 			const Vector3& asteroidVelocity = mRegistry.get<VelocityComponent>(asteroid).Velocity;
 			const Vector3 impactVelocity = Vector3Subtract(velocityComponent.Velocity, asteroidVelocity);
 
 			const Vector3& asteroidPosition = mRegistry.get<PositionComponent>(asteroid).Position;
-			const Vector3 toAsteroid = findVectorGap(to, asteroidPosition);
+			const Vector3 toAsteroid = findVectorGap(positionComponent.Position, asteroidPosition);
 
 			if (Vector3DotProduct(impactVelocity, toAsteroid) <= 0.f) {
 				return false;
@@ -398,26 +391,41 @@ void Simulation::Simulate() {
 				return false;
 			}
 
-			const Vector3 impactDirection = Vector3Normalize(impactVelocity);
-			const Vector3 normalizedToAsteroid = Vector3Normalize(toAsteroid);
+			ParticleCollisionComponent& particleCollision = mRegistry.get_or_emplace<ParticleCollisionComponent>(particle);
+			particleCollision.ImpactNormal = Vector3Normalize(toAsteroid);
+			particleCollision.ContactSpeed = abs(Vector3DotProduct(impactVelocity, particleCollision.ImpactNormal));
+			particleCollision.Collider = asteroid;
 
-			const float cos = Vector3DotProduct(Vector3Normalize(impactDirection), Vector3Normalize(normalizedToAsteroid));
-
-			if (cos < 0.575f) {
-				const Vector3 bounceVelocity = Vector3Subtract(velocityComponent.Velocity, Vector3Scale(normalizedToAsteroid, 2.f * cos * WeaponData::BulletSpeed));
-				velocityComponent.Velocity = Vector3Scale(bounceVelocity, 0.5f);
-			}
-			else {
-				mRegistry.get_or_emplace<HitAsteroidComponent>(asteroid, std::clamp(cos, 0.f, 1.f));
-				mRegistry.emplace<DestroyComponent>(bulletEntity);
-			}
 			return true;
 		};
 
-		const Vector2 flatTo = { to.x, to.z };
-		mSpatialPartition.IterateNearby(flatTo, flatTo, nearbyProcess);
+		const Vector2 flatPosition = { positionComponent.Position.x, positionComponent.Position.z };
+		mSpatialPartition.IterateNearby(flatPosition, flatPosition, particleCollisionHandler);
 	};
-	bulletView.each(bulletCollisionProcess);
+	particleCollisionView.each(particleCollisionProcess);
+
+	auto bulletPostCollisionView = mRegistry.view<ParticleCollisionComponent, BulletComponent, VelocityComponent>();
+	auto bulletPostCollisionProcess = [&](entt::entity bullet, ParticleCollisionComponent& collision, VelocityComponent& velocityComponent) {
+		if (collision.ContactSpeed <= 0.75f * WeaponData::BulletSpeed) {
+			velocityComponent.Velocity = Vector3Scale(velocityComponent.Velocity, 0.5f);
+			collision.ContactSpeed *= 0.5f;
+			return;
+		}
+		mRegistry.erase<ParticleCollisionComponent>(bullet);
+		mRegistry.get_or_emplace<HitAsteroidComponent>(collision.Collider, std::clamp(collision.ContactSpeed / WeaponData::BulletSpeed, 0.f, 1.f));
+		mRegistry.emplace<DestroyComponent>(bullet);
+	};
+	bulletPostCollisionView.each(bulletPostCollisionProcess);
+
+	auto particlePostCollisionView = mRegistry.view<ParticleCollisionComponent, VelocityComponent>();
+	auto particlePostCollisionProcess = [](entt::entity particle, const ParticleCollisionComponent& collision, VelocityComponent& velocityComponent)
+	{
+		const Vector3 bounceVelocity = Vector3Subtract(velocityComponent.Velocity, Vector3Scale(collision.ImpactNormal, 2.f * collision.ContactSpeed));
+		velocityComponent.Velocity = bounceVelocity;
+	};
+	particlePostCollisionView.each(particlePostCollisionProcess);
+
+	mRegistry.clear<ParticleCollisionComponent>();
 
 	auto playerCollisionView = mRegistry.view<PositionComponent, SpaceshipInputComponent>();
 	for (entt::entity spacechip : playerCollisionView) {

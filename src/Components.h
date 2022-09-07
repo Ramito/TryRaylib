@@ -57,3 +57,9 @@ struct RespawnComponent {
 	uint32_t InputId;
 	float TimeLeft;
 };
+
+struct ParticleCollisionComponent {
+	Vector3 ImpactNormal;
+	float ContactSpeed;
+	entt::entity Collider;
+};
