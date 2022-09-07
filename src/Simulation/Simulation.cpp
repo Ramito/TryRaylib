@@ -427,6 +427,21 @@ void Simulation::Simulate() {
 
 	mRegistry.clear<ParticleCollisionComponent>();
 
+	auto makeExplosion = [&](const Vector3& position) {
+		for (size_t i = 0; i < 1500; ++i) {
+			auto particle = mRegistry.create();
+			float x = 2.f * UniformDistribution(mRandomGenerator) - 1.f;
+			float y = 2.f * UniformDistribution(mRandomGenerator) - 1.f;
+			float z = 2.f * UniformDistribution(mRandomGenerator) - 1.f;
+			const Vector3 radial = Vector3Normalize({ x,y,z });
+			float radius = cbrt(UniformDistribution(mRandomGenerator));
+			mRegistry.emplace<PositionComponent>(particle, position);
+			mRegistry.emplace<VelocityComponent>(particle, Vector3Scale(radial, 175.f * radius));
+			mRegistry.emplace<ParticleComponent>(particle, 1.f + UniformDistribution(mRandomGenerator) * 20.f);
+			mRegistry.emplace<ParticleDragComponent>(particle);
+		}
+	};
+
 	auto playerCollisionView = mRegistry.view<PositionComponent, SpaceshipInputComponent>();
 	for (entt::entity spacechip : playerCollisionView) {
 		const Vector3& spaceshipPosition = mRegistry.get<PositionComponent>(spacechip).Position;
@@ -440,6 +455,9 @@ void Simulation::Simulate() {
 				entt::entity respawner = mRegistry.create();
 				mRegistry.emplace<RespawnComponent>(respawner, mRegistry.get<SpaceshipInputComponent>(spacechip).InputId, GameData::RespawnTimer);
 				mRegistry.emplace<DestroyComponent>(spacechip);
+
+				makeExplosion(spaceshipPosition);
+
 				return true;
 			}
 			return false;
@@ -460,8 +478,8 @@ void Simulation::Simulate() {
 			return;
 		}
 		const float breakRadius = 0.5f * radius;
+		const Vector3& position = mRegistry.get<PositionComponent>(asteroid).Position;
 		if (breakRadius > SpaceData::MinAsteroidRadius * 0.5f) {
-			const Vector3& position = mRegistry.get<PositionComponent>(asteroid).Position;
 			const Vector3& velocity = mRegistry.get<VelocityComponent>(asteroid).Velocity;
 
 
@@ -474,6 +492,7 @@ void Simulation::Simulate() {
 			MakeAsteroid(mRegistry, breakRadius, Vector3Add(position, Vector3Scale(axis, breakRadius)), Vector3Add(velocity, speedDrift));
 			MakeAsteroid(mRegistry, radius - breakRadius, Vector3Subtract(position, Vector3Scale(axis, radius - breakRadius)), Vector3Subtract(velocity, speedDrift));
 		}
+		makeExplosion(position);
 		mRegistry.emplace<DestroyComponent>(asteroid);
 	};
 	hitAsteroidView.each(hitAsteroidProcess);
