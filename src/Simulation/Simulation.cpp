@@ -498,6 +498,9 @@ void Simulation::Simulate() {
 	hitAsteroidView.each(hitAsteroidProcess);
 
 	mRegistry.clear<HitAsteroidComponent>();
+
+	mFrame++;
+	mGameTime += deltaTime;
 }
 
 void Simulation::Tick() {
