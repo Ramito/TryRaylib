@@ -238,9 +238,9 @@ void Simulation::Simulate() {
 		const VelocityComponent& velocityComponent,
 		const OrientationComponent& orientationComponent) {
 			constexpr float ThrustModule = 25.f;
-			constexpr float RandomModule = 5.5f;
+			constexpr float RandomModule = 2.5f;
 			constexpr float Offset = 0.4f;
-			constexpr uint32_t MinParticles = 0;
+			constexpr uint32_t MinParticles = 1;
 			constexpr uint32_t MaxParticles = 2;
 			float relativeThrust = thrustComponent.Thrust / SpaceshipData::Thrust;
 			uint32_t particles = MinParticles + relativeThrust * relativeThrust * MaxParticles;
@@ -253,12 +253,13 @@ void Simulation::Simulate() {
 				entt::entity particleEntity = mRegistry.create();
 				mRegistry.emplace<ParticleDragComponent>(particleEntity);
 				mRegistry.emplace<PositionComponent>(particleEntity, Vector3Add(positionComponent.Position, Vector3Scale(back, Offset)));
-				float randX = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
-				float randY = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
-				float randZ = 1.f - 2.f * static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+				std::normal_distribution normal(0.f, 1.f);
+				float randX = normal(mRandomGenerator);
+				float randY = normal(mRandomGenerator);
+				float randZ = normal(mRandomGenerator);
 				Vector3 randomVelocity = Vector3Scale({ randX, randY, randZ }, RandomModule);
 				mRegistry.emplace<VelocityComponent>(particleEntity, Vector3Add(baseVelocity, randomVelocity));
-				float lifetime = ((std::rand() + std::rand()) / (2 * RAND_MAX / 1250)) * deltaTime;
+				float lifetime = 15.f * (UniformDistribution(mRandomGenerator) + UniformDistribution(mRandomGenerator));
 				mRegistry.emplace<ParticleComponent>(particleEntity, lifetime);
 			}
 	};
@@ -431,6 +432,34 @@ void Simulation::Simulate() {
 	};
 	particleCollisionView.each(particleCollisionProcess);
 
+	auto playerCollisionView = mRegistry.view<PositionComponent, SpaceshipInputComponent>();
+
+	for (entt::entity spaceship : playerCollisionView) {
+		const Vector3& spaceshipPosition = mRegistry.get<PositionComponent>(spaceship).Position;
+		const Vector3& spaceshipVelocity = mRegistry.get<VelocityComponent>(spaceship).Velocity;
+		auto particleSpaceshipCollisionHandle = [&](entt::entity particle, const ParticleComponent&, const PositionComponent& positionComponent, VelocityComponent& velocityComponent)
+		{
+			const Vector3 impactVelocity = Vector3Subtract(velocityComponent.Velocity, spaceshipVelocity);
+			const Vector3 gapToSpaceship = findVectorGap(positionComponent.Position, spaceshipPosition);
+
+			if (Vector3DotProduct(impactVelocity, gapToSpaceship) <= 0.f) {
+				return false;
+			}
+
+			constexpr float radius = SpaceshipData::ParticleCollisionRadius;
+			const float distanceSqr = Vector3LengthSqr(gapToSpaceship);
+			if (distanceSqr > radius * radius) {
+				return false;
+			}
+
+			ParticleCollisionComponent& particleCollision = mRegistry.get_or_emplace<ParticleCollisionComponent>(particle);
+			particleCollision.ImpactNormal = Vector3Normalize(gapToSpaceship);
+			particleCollision.ContactSpeed = abs(Vector3DotProduct(impactVelocity, particleCollision.ImpactNormal));
+			particleCollision.Collider = spaceship;
+		};
+		particleCollisionView.each(particleSpaceshipCollisionHandle);
+	}
+
 	auto bulletPostCollisionView = mRegistry.view<ParticleCollisionComponent, BulletComponent, VelocityComponent>();
 	auto bulletPostCollisionProcess = [&](entt::entity bullet, ParticleCollisionComponent& collision, VelocityComponent& velocityComponent) {
 		if (collision.ContactSpeed <= 0.75f * WeaponData::BulletSpeed) {
@@ -467,14 +496,13 @@ void Simulation::Simulate() {
 			const Vector3 radial = Vector3Scale(Vector3Normalize({ x,y,z }), 0.1f);
 			mRegistry.emplace<PositionComponent>(particle, Vector3Add(position, radial));
 			mRegistry.emplace<VelocityComponent>(particle, Vector3Zero());
-			mRegistry.emplace<ParticleComponent>(particle, 2.f + UniformDistribution(mRandomGenerator) * 20.f);
+			mRegistry.emplace<ParticleComponent>(particle, (UniformDistribution(mRandomGenerator) + UniformDistribution(mRandomGenerator)) * 15.f);
 			mRegistry.emplace<ParticleDragComponent>(particle);
 		}
 	};
 
-	auto playerCollisionView = mRegistry.view<PositionComponent, SpaceshipInputComponent>();
-	for (entt::entity spacechip : playerCollisionView) {
-		const Vector3& spaceshipPosition = mRegistry.get<PositionComponent>(spacechip).Position;
+	for (entt::entity spaceship : playerCollisionView) {
+		const Vector3& spaceshipPosition = mRegistry.get<PositionComponent>(spaceship).Position;
 
 		auto collisionChecker = [&](entt::entity asteroid) {
 			const float asteroidRadius = mRegistry.get<AsteroidComponent>(asteroid).Radius;
@@ -484,8 +512,8 @@ void Simulation::Simulate() {
 			const float collisionDistance = asteroidRadius + SpaceshipData::CollisionRadius;
 			if (distanceSqr < collisionDistance * collisionDistance) {
 				entt::entity respawner = mRegistry.create();
-				mRegistry.emplace<RespawnComponent>(respawner, mRegistry.get<SpaceshipInputComponent>(spacechip).InputId, GameData::RespawnTimer);
-				mRegistry.emplace<DestroyComponent>(spacechip);
+				mRegistry.emplace<RespawnComponent>(respawner, mRegistry.get<SpaceshipInputComponent>(spaceship).InputId, GameData::RespawnTimer);
+				mRegistry.emplace<DestroyComponent>(spaceship);
 
 				makeExplosion(spaceshipPosition, ExplosionData::SpaceshipRadius);
 

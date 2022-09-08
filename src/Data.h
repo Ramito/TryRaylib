@@ -53,6 +53,7 @@ namespace SpaceshipData {
 	constexpr float SteerM = 1.45f;
 
 	constexpr float CollisionRadius = 0.75f;
+	constexpr float ParticleCollisionRadius = 1.25f;
 }
 
 namespace WeaponData {
