@@ -63,3 +63,8 @@ struct ParticleCollisionComponent {
 	float ContactSpeed;
 	entt::entity Collider;
 };
+
+struct ExplosionComponent {
+	float StartTime;
+	float Radius;
+};

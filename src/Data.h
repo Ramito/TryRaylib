@@ -66,3 +66,10 @@ namespace ParticleData {
 	constexpr float LinearDrag = 0.f;
 	constexpr float QuadraticDrag = 1e-2;
 }
+
+namespace ExplosionData {
+	constexpr float Time = 0.2f;
+	constexpr float SpaceshipRadius = 3.5f;
+	constexpr float AsteroidMultiplier = 1.f;
+	constexpr float ParticleForce = 150.f;
+}

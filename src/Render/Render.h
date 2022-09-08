@@ -14,7 +14,7 @@ class Render {
 public:
 	Render(uint32_t viewID, RenderDependencies& dependencies);
 	~Render();
-	void Draw();
+	void Draw(float gameTime);
 private:
 	uint32_t mViewID;
 	entt::registry& mRegistry;

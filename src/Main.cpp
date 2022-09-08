@@ -99,7 +99,7 @@ void main() {
 		else {
 			ticksPerPass = 1;
 		}
-		render.Draw();
+		render.Draw(sim.GameTime);
 	}
 	CloseWindow();
 }

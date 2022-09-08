@@ -16,11 +16,12 @@ public:
 	void Init();
 	void Tick();
 
+	float GameTime;
+
 private:
 	void Simulate();
 
 	uint32_t mFrame = 0;
-	float mGameTime;
 
 	entt::registry& mRegistry;
 	const std::array<GameInput, 4>& mGameInput;

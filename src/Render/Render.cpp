@@ -127,7 +127,7 @@ namespace {
 			&& rightSupport <= frustum.RightSupport;
 	}
 
-	void DrawToCurrentTarget(const Camera& camera, const entt::registry& registry) {
+	void DrawToCurrentTarget(const Camera& camera, const entt::registry& registry, float gameTime) {
 		const CameraFrustum frustum = ComputeFrustum(camera);
 
 		for (auto entity : registry.view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
@@ -159,6 +159,21 @@ namespace {
 				}
 			}
 		}
+
+		for (auto explosion : registry.view<ExplosionComponent>()) {
+			const Vector3& position = registry.get<PositionComponent>(explosion).Position;
+			const ExplosionComponent& explosionComponent = registry.get<ExplosionComponent>(explosion);
+			const float relativeTime = std::clamp((gameTime - explosionComponent.StartTime) / ExplosionData::Time, 0.f, 1.f);
+			const float radiusModule = std::cbrt(relativeTime);
+			const float radius = radiusModule * explosionComponent.Radius;
+			Color color = { 255, 255, 255, (1.f - relativeTime) * 255 };
+			for (const Vector3& offset : SpaceOffsets) {
+				if (PositionRadiusInsideFrustum(frustum, position, radius)) {
+					DrawSphere(position, explosionComponent.Radius * radiusModule, color);
+					break;
+				}
+			}
+		}
 	}
 
 	void DrawBulletsToCurrentTarget(const Camera& camera, const entt::registry& registry) {
@@ -185,7 +200,7 @@ namespace {
 	}
 }
 
-void Render::Draw() {
+void Render::Draw(float gameTime) {
 	for (auto playerEntity : mRegistry.view<PositionComponent, SpaceshipInputComponent>()) {
 		auto& input = mRegistry.get<SpaceshipInputComponent>(playerEntity);
 		if (input.InputId == mViewID) {
@@ -226,7 +241,7 @@ void Render::Draw() {
 	BeginTextureMode(mBackgroundTexture);
 	ClearBackground(BLANK);
 	BeginMode3D(backgroundCamera);
-	DrawToCurrentTarget(backgroundCamera, mRegistry);
+	DrawToCurrentTarget(backgroundCamera, mRegistry, gameTime);
 	EndMode3D();
 	EndTextureMode();
 
@@ -242,7 +257,7 @@ void Render::Draw() {
 	DrawTextureRec(mBackgroundTexture.texture, targetRect, Vector2Zero(), DARKBROWN);
 	BeginMode3D(mMainCamera);
 	DrawGrid(500, 5.0f);
-	DrawToCurrentTarget(mMainCamera, mRegistry);
+	DrawToCurrentTarget(mMainCamera, mRegistry, gameTime);
 	EndMode3D();
 	BeginBlendMode(BLEND_ADDITIVE);
 	DrawTextureRec(mBulletTexture.texture, targetRect, Vector2Zero(), WHITE);
