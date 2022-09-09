@@ -202,7 +202,7 @@ private:
 
 	template<typename TAction>
 	void IterateArea(const Area& area, TAction&& action) {
-		assert(area.MinI < CountX&& area.MinJ < CountY);
+		assert(area.MinI <= CountX && area.MinJ <= CountY);
 		assert(area.MaxI >= 0 && area.MaxJ >= 0);
 		for (int j = area.MinJ; j <= area.MaxJ; ++j) {
 			for (int i = area.MinI; i <= area.MaxI; ++i) {

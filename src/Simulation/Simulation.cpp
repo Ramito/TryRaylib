@@ -467,9 +467,9 @@ void Simulation::Simulate() {
 			collision.ContactSpeed *= 0.5f;
 			return;
 		}
-		mRegistry.erase<ParticleCollisionComponent>(bullet);
 		mRegistry.get_or_emplace<HitAsteroidComponent>(collision.Collider, std::clamp(collision.ContactSpeed / WeaponData::BulletSpeed, 0.f, 1.f));
 		mRegistry.emplace<DestroyComponent>(bullet);
+		mRegistry.erase<ParticleCollisionComponent>(bullet);
 	};
 	bulletPostCollisionView.each(bulletPostCollisionProcess);
 
