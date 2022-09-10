@@ -158,6 +158,7 @@ namespace {
 				const Vector3 position = Vector3Add(registry.get<PositionComponent>(particle).Position, offset);
 				if (PositionRadiusInsideFrustum(frustum, position, 0.f)) {
 					DrawPoint3D(position, ORANGE);
+					break;
 				}
 			}
 		}
@@ -178,6 +179,7 @@ namespace {
 					DrawSphere(position, 0.12f, GREEN);
 					DrawSphere(position, 0.175f, { 0, 228, 48, 180 });
 					DrawSphere(position, 1.f, { 0, 228, 48, 80 });
+					break;
 				}
 			}
 		}
