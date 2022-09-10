@@ -24,11 +24,13 @@ Render::Render(uint32_t viewID, RenderDependencies& dependencies) : mViewID(view
 	mBackgroundTexture = LoadRenderTexture(width, height);
 
 	mBulletTexture = LoadRenderTexture(width, height);
+	mScreenTexture = LoadRenderTexture(width, height);
 }
 
 Render::~Render() {
 	UnloadRenderTexture(mBackgroundTexture);
 	UnloadRenderTexture(mBulletTexture);
+	UnloadRenderTexture(mScreenTexture);
 }
 
 static void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
@@ -145,7 +147,7 @@ namespace {
 				const float radius = registry.get<AsteroidComponent>(asteroid).Radius;
 
 				if (PositionRadiusInsideFrustum(frustum, position, radius)) {
-					DrawSphereWires(position, radius, 8, 8, YELLOW);
+					DrawSphereWires(position, radius, 8, 8, RAYWHITE);
 					break;
 				}
 			}
@@ -251,17 +253,19 @@ void Render::Draw(float gameTime) {
 	EndMode3D();
 	EndTextureMode();
 
-	BeginDrawing();
-	ClearBackground(DARKGRAY);
-	DrawTextureRec(mBackgroundTexture.texture, targetRect, Vector2Zero(), DARKBROWN);
+	BeginTextureMode(mScreenTexture);
+	ClearBackground({ 0, 41, 96, 255 });
+	DrawTextureRec(mBackgroundTexture.texture, targetRect, Vector2Zero(), DARKGRAY);
 	BeginMode3D(mMainCamera);
-	DrawGrid(500, 5.0f);
 	DrawToCurrentTarget(mMainCamera, mRegistry);
 	EndMode3D();
 	BeginBlendMode(BLEND_ADDITIVE);
 	DrawTextureRec(mBulletTexture.texture, targetRect, Vector2Zero(), WHITE);
 	EndBlendMode();
+	EndTextureMode();
 
+	BeginDrawing();
+	DrawTextureRec(mScreenTexture.texture, targetRect, Vector2Zero(), WHITE);
 	DrawFPS(10, 10);
 	EndDrawing();
 }

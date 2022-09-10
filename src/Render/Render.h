@@ -21,4 +21,5 @@ private:
 	Camera& mMainCamera;
 	RenderTexture mBackgroundTexture;
 	RenderTexture mBulletTexture;
+	RenderTexture mScreenTexture;
 };
