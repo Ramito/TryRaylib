@@ -10,7 +10,11 @@
 
 static void SetupWindow() {
 	SetTargetFPS(SimTimeData::TargetFPS);
-	InitWindow(1600, 1200, "Game");
+	int monitor = GetCurrentMonitor();
+	int width = GetMonitorWidth(monitor);
+	int height = GetMonitorHeight(monitor);
+	InitWindow(width, height, "Game");
+	ToggleFullscreen();
 }
 
 void UpdateInput(const std::array<Camera, 4>& cameras, std::array<GameInput, 4>& gameInputs) {
