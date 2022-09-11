@@ -2,8 +2,10 @@
 
 #include "Components.h"
 #include "Data.h"
+#include "SpaceUtil.h"
 #include <raymath.h>
 #include <rlgl.h>
+#include <optional>
 
 constexpr Vector3 CameraOffset = { -10.f, 25.f, -10.f };
 
@@ -71,19 +73,8 @@ static void DrawSpaceShip(const Vector3& position, const Quaternion orientation)
 }
 
 namespace {
-	constexpr std::array<Vector3, 9> SpaceOffsets = {
-			Vector3{0.f,0.f,0.f},
-			Vector3{0.f,0.f,SpaceData::LengthZ},
-			Vector3{0.f,0.f,-SpaceData::LengthZ},
-			Vector3{SpaceData::LengthX,0.f,0.f},
-			Vector3{SpaceData::LengthX,0.f,SpaceData::LengthZ},
-			Vector3{SpaceData::LengthX,0.f,-SpaceData::LengthZ},
-			Vector3{-SpaceData::LengthX,0.f,0.f},
-			Vector3{-SpaceData::LengthX,0.f,SpaceData::LengthZ},
-			Vector3{-SpaceData::LengthX,0.f,-SpaceData::LengthZ}
-	};
-
 	struct CameraFrustum {
+		Vector3 Target;
 		float TopSupport;
 		Vector3 TopNormal;
 		float LeftSupport;
@@ -114,19 +105,24 @@ namespace {
 		float bottomAnchor = Vector3DotProduct(bottomNormal, anchor);
 		float rightAnchor = Vector3DotProduct(rightNormal, anchor);
 
-		return { topAnchor, topNormal, leftAnchor, leftNormal, bottomAnchor, bottomNormal, rightAnchor, rightNormal };
+		return { camera.target, topAnchor, topNormal, leftAnchor, leftNormal, bottomAnchor, bottomNormal, rightAnchor, rightNormal };
 	}
 
-	inline bool PositionRadiusInsideFrustum(const CameraFrustum& frustum, const Vector3& position, float radius) {
-		float topSupport = Vector3DotProduct(frustum.TopNormal, position) - radius;
-		float leftSupport = Vector3DotProduct(frustum.LeftNormal, position) - radius;
-		float bottomSupport = Vector3DotProduct(frustum.BottomNormal, position) - radius;
-		float rightSupport = Vector3DotProduct(frustum.RightNormal, position) - radius;
+	inline std::optional<Vector3> FindFrustumVisiblePosition(const CameraFrustum& frustum, const Vector3& position, float radius) {
+		const Vector3 renderPosition = Vector3Add(SpaceUtil::FindVectorGap(frustum.Target, position), frustum.Target);
 
-		return topSupport <= frustum.TopSupport
+		float topSupport = Vector3DotProduct(frustum.TopNormal, renderPosition) - radius;
+		float leftSupport = Vector3DotProduct(frustum.LeftNormal, renderPosition) - radius;
+		float bottomSupport = Vector3DotProduct(frustum.BottomNormal, renderPosition) - radius;
+		float rightSupport = Vector3DotProduct(frustum.RightNormal, renderPosition) - radius;
+
+		if (topSupport <= frustum.TopSupport
 			&& leftSupport <= frustum.LeftSupport
 			&& bottomSupport <= frustum.BottomSupport
-			&& rightSupport <= frustum.RightSupport;
+			&& rightSupport <= frustum.RightSupport) {
+			return renderPosition;
+		}
+		return {};
 	}
 
 	void DrawToCurrentTarget(const Camera& camera, const entt::registry& registry) {
@@ -135,31 +131,23 @@ namespace {
 		for (auto entity : registry.view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
 			auto& position = registry.get<PositionComponent>(entity);
 			auto& orientation = registry.get<OrientationComponent>(entity);
-			if (PositionRadiusInsideFrustum(frustum, position.Position, 0.f)) {
-				// TODO: Spaceship bound radius!
-				DrawSpaceShip(position.Position, orientation.Quaternion);
+			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position.Position, SpaceshipData::CollisionRadius)) {
+				DrawSpaceShip(renderPosition.value(), orientation.Quaternion);
 			}
 		}
 
 		for (auto asteroid : registry.view<AsteroidComponent>()) {
-			for (const Vector3& offset : SpaceOffsets) {
-				const Vector3 position = Vector3Add(registry.get<PositionComponent>(asteroid).Position, offset);
-				const float radius = registry.get<AsteroidComponent>(asteroid).Radius;
-
-				if (PositionRadiusInsideFrustum(frustum, position, radius)) {
-					DrawSphereWires(position, radius, 8, 8, RAYWHITE);
-					break;
-				}
+			const float radius = registry.get<AsteroidComponent>(asteroid).Radius;
+			const Vector3 position = registry.get<PositionComponent>(asteroid).Position;
+			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, radius)) {
+				DrawSphereWires(renderPosition.value(), radius, 8, 8, RAYWHITE);
 			}
 		}
 
 		for (entt::entity particle : registry.view<ParticleComponent>(entt::exclude<BulletComponent>)) {
-			for (const Vector3& offset : SpaceOffsets) {
-				const Vector3 position = Vector3Add(registry.get<PositionComponent>(particle).Position, offset);
-				if (PositionRadiusInsideFrustum(frustum, position, 0.f)) {
-					DrawPoint3D(position, ORANGE);
-					break;
-				}
+			const Vector3 position = registry.get<PositionComponent>(particle).Position;
+			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, 0.f)) {
+				DrawPoint3D(renderPosition.value(), ORANGE);
 			}
 		}
 	}
@@ -171,16 +159,13 @@ namespace {
 		rlDisableDepthMask();
 
 		for (entt::entity particle : registry.view<BulletComponent>()) {
-			for (const Vector3& offset : SpaceOffsets) {
-				const Vector3 position = Vector3Add(registry.get<PositionComponent>(particle).Position, offset);
-				if (PositionRadiusInsideFrustum(frustum, position, 0.f)) {
-					// Ghetto bloom
-					DrawSphere(position, 0.05f, WHITE);
-					DrawSphere(position, 0.12f, GREEN);
-					DrawSphere(position, 0.175f, { 0, 228, 48, 180 });
-					DrawSphere(position, 1.f, { 0, 228, 48, 80 });
-					break;
-				}
+			const Vector3 position = registry.get<PositionComponent>(particle).Position;
+			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, 0.f)) {
+				// Ghetto bloom
+				DrawSphere(renderPosition.value(), 0.05f, WHITE);
+				DrawSphere(renderPosition.value(), 0.12f, GREEN);
+				DrawSphere(renderPosition.value(), 0.175f, { 0, 228, 48, 180 });
+				DrawSphere(renderPosition.value(), 1.f, { 0, 228, 48, 80 });
 			}
 		}
 
@@ -191,11 +176,8 @@ namespace {
 			const float radiusModule = std::cbrt(relativeTime);
 			const float radius = radiusModule * explosionComponent.Radius;
 			Color color = { 255, 255, 255, (1.f - relativeTime) * 255 };
-			for (const Vector3& offset : SpaceOffsets) {
-				if (PositionRadiusInsideFrustum(frustum, position, radius)) {
-					DrawSphere(position, explosionComponent.Radius * radiusModule, color);
-					break;
-				}
+			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, radius)) {
+				DrawSphere(renderPosition.value(), explosionComponent.Radius * radiusModule, color);
 			}
 		}
 
