@@ -248,8 +248,6 @@ void Render::Draw(float gameTime) {
 		auto& position = mRegistry.get<PositionComponent>(playerEntity);
 		mCameras[input.InputId].target = position.Position;
 		mCameras[input.InputId].position = Vector3Add(position.Position, CameraOffset);
-		UpdateCamera(&mCameras[input.InputId]);
-		break;
 	}
 
 	for (size_t i = 0; i < mViews; ++i) {

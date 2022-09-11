@@ -10,9 +10,8 @@
 
 static void SetupWindow() {
 	SetTargetFPS(SimTimeData::TargetFPS);
-	int monitor = GetCurrentMonitor();
-	int width = GetMonitorWidth(monitor);
-	int height = GetMonitorHeight(monitor);
+	int width = GetMonitorWidth(0);
+	int height = GetMonitorHeight(0);
 	InitWindow(width, height, "Game");
 	ToggleFullscreen();
 }

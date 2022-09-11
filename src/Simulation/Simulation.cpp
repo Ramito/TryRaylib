@@ -34,6 +34,7 @@ void Simulation::Init() {
 	mRegistry.reserve(64000);
 
 	SpawnSpaceship(mRegistry, 0u);
+	SpawnSpaceship(mRegistry, 1u);
 
 	std::uniform_real_distribution<float> xDistribution(0.f, SpaceData::LengthX);
 	std::uniform_real_distribution<float> zDistribution(0.f, SpaceData::LengthZ);
