@@ -9,30 +9,35 @@
 
 constexpr Vector3 CameraOffset = { -10.f, 25.f, -10.f };
 
-Render::Render(uint32_t viewID, RenderDependencies& dependencies) : mViewID(viewID)
+Render::Render(uint32_t views, RenderDependencies& dependencies) : mViews(views)
 , mRegistry(dependencies.GetDependency<entt::registry>())
-, mMainCamera(dependencies.GetDependency<GameCameras>()[viewID])
+, mCameras(dependencies.GetDependency<GameCameras>())
+, mViewPorts(dependencies.GetDependency<ViewPorts>())
 {
-	mMainCamera.target = { 0.f, 0.f, 0.f };
-	mMainCamera.position = Vector3Negate(CameraOffset);
-	mMainCamera.projection = CAMERA_PERSPECTIVE;
-	mMainCamera.up = { 0.f, 1.f, 0.f };
-	mMainCamera.fovy = 70.f;
-	SetCameraMode(mMainCamera, CAMERA_CUSTOM);
+	for (Camera& camera : mCameras) {
+		camera.target = { 0.f, 0.f, 0.f };
+		camera.position = CameraOffset;
+		camera.projection = CAMERA_PERSPECTIVE;
+		camera.up = { 0.f, 1.f, 0.f };
+		camera.fovy = 70.f;
+		SetCameraMode(camera, CAMERA_CUSTOM);
+	}
 
-	int width = GetScreenWidth();
-	int height = GetScreenHeight();
-
-	mBackgroundTexture = LoadRenderTexture(width, height);
-
-	mBulletTexture = LoadRenderTexture(width, height);
-	mScreenTexture = LoadRenderTexture(width, height);
+	for (size_t i = 0; i < mViewPorts.size(); ++i) {
+		int width = mViewPorts[i].width;
+		int height = mViewPorts[i].height;
+		mBackgroundTextures[i] = LoadRenderTexture(width, height);
+		mBulletTextures[i] = LoadRenderTexture(width, height);
+		mViewPortTextures[i] = LoadRenderTexture(width, height);
+	}
 }
 
 Render::~Render() {
-	UnloadRenderTexture(mBackgroundTexture);
-	UnloadRenderTexture(mBulletTexture);
-	UnloadRenderTexture(mScreenTexture);
+	for (size_t i = 0; i < mViewPorts.size(); ++i) {
+		UnloadRenderTexture(mBackgroundTextures[i]);
+		UnloadRenderTexture(mBulletTextures[i]);
+		UnloadRenderTexture(mViewPortTextures[i]);
+	}
 }
 
 static void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
@@ -85,14 +90,17 @@ namespace {
 		Vector3 RightNormal;
 	};
 
-	CameraFrustum ComputeFrustum(const Camera camera) {
-		const float screenW = GetScreenWidth();
-		const float screenH = GetScreenHeight();
+	CameraFrustum ComputeFrustum(const Camera& camera, const Rectangle& viewPort) {
 
-		Ray minMinRay = GetMouseRay(Vector2{ 0.f, 0.f }, camera);
-		Ray minMaxRay = GetMouseRay(Vector2{ 0.f, screenH }, camera);
-		Ray maxMaxRay = GetMouseRay(Vector2{ screenW, screenH }, camera);
-		Ray maxMinRay = GetMouseRay(Vector2{ screenW, 0.f }, camera);
+		float minX = viewPort.width / 2;
+		float minY = 0.f;
+		float maxX = minX + viewPort.width;
+		float maxY = minY + viewPort.height;
+
+		Ray minMinRay = GetMouseRay(Vector2{ minX, minY }, camera);
+		Ray minMaxRay = GetMouseRay(Vector2{ minX, maxY }, camera);
+		Ray maxMaxRay = GetMouseRay(Vector2{ maxX, maxY }, camera);
+		Ray maxMinRay = GetMouseRay(Vector2{ maxX, minY }, camera);
 
 		Vector3 anchor = camera.position;
 		Vector3 topNormal = Vector3Normalize(Vector3CrossProduct(maxMinRay.direction, minMinRay.direction));
@@ -125,8 +133,8 @@ namespace {
 		return {};
 	}
 
-	void DrawToCurrentTarget(const Camera& camera, const entt::registry& registry) {
-		const CameraFrustum frustum = ComputeFrustum(camera);
+	void DrawToCurrentTarget(const Camera& camera, const Rectangle& viewPort, const entt::registry& registry) {
+		const CameraFrustum frustum = ComputeFrustum(camera, viewPort);
 
 		for (auto entity : registry.view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
 			auto& position = registry.get<PositionComponent>(entity);
@@ -152,8 +160,8 @@ namespace {
 		}
 	}
 
-	void DrawBulletsToCurrentTarget(const Camera& camera, const entt::registry& registry, float gameTime) {
-		const CameraFrustum frustum = ComputeFrustum(camera);
+	void DrawBulletsToCurrentTarget(const Camera& camera, const Rectangle& viewPort, const entt::registry& registry, float gameTime) {
+		const CameraFrustum frustum = ComputeFrustum(camera, viewPort);
 
 		BeginBlendMode(BLEND_ALPHA);
 		rlDisableDepthMask();
@@ -183,73 +191,77 @@ namespace {
 
 		rlEnableDepthMask();
 	}
+
+	void RenderView(const Camera& camera, const Rectangle& viewPort, RenderTexture& viewTexture, RenderTexture& backgroundTexture, RenderTexture& bulletTexture, entt::registry& registry, float gameTime) {
+		Camera backgroundCamera = camera;
+		float targetX = camera.target.x + SpaceData::LengthX * 0.5f;
+		float targetZ = camera.target.z + SpaceData::LengthZ * 0.5f;
+		if (targetX >= SpaceData::LengthX) {
+			targetX -= SpaceData::LengthX;
+		}
+		if (targetZ >= SpaceData::LengthZ) {
+			targetZ -= SpaceData::LengthZ;
+		}
+		backgroundCamera.target = { targetX, 0.f, targetZ };
+		backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraOffset, 2.25f));
+
+		BeginTextureMode(bulletTexture);
+		ClearBackground(BLANK);
+		BeginMode3D(backgroundCamera);
+		DrawBulletsToCurrentTarget(backgroundCamera, viewPort, registry, gameTime);
+		EndBlendMode();
+		EndMode3D();
+		EndTextureMode();
+
+		BeginTextureMode(backgroundTexture);
+		ClearBackground(BLANK);
+		BeginMode3D(backgroundCamera);
+		DrawToCurrentTarget(backgroundCamera, viewPort, registry);
+		EndMode3D();
+		EndTextureMode();
+
+		BeginTextureMode(bulletTexture);
+		BeginMode3D(camera);
+		DrawBulletsToCurrentTarget(camera, viewPort, registry, gameTime);
+		EndBlendMode();
+		EndMode3D();
+		EndTextureMode();
+
+		Rectangle target = { 0, 0, viewPort.width, -viewPort.height };
+
+		BeginTextureMode(viewTexture);
+		ClearBackground({ 0, 41, 96, 255 });
+		DrawTextureRec(backgroundTexture.texture, target, Vector2Zero(), DARKGRAY);
+		BeginMode3D(camera);
+		DrawToCurrentTarget(camera, viewPort, registry);
+		EndMode3D();
+		BeginBlendMode(BLEND_ADDITIVE);
+		DrawTextureRec(bulletTexture.texture, target, Vector2Zero(), WHITE);
+		EndBlendMode();
+		EndTextureMode();
+	}
 }
 
 void Render::Draw(float gameTime) {
 	for (auto playerEntity : mRegistry.view<PositionComponent, SpaceshipInputComponent>()) {
 		auto& input = mRegistry.get<SpaceshipInputComponent>(playerEntity);
-		if (input.InputId == mViewID) {
-			auto& position = mRegistry.get<PositionComponent>(playerEntity);
-			mMainCamera.target = position.Position;
-			mMainCamera.position = Vector3Add(mMainCamera.target, CameraOffset);
-			UpdateCamera(&mMainCamera);
-			break;
-		}
+		auto& position = mRegistry.get<PositionComponent>(playerEntity);
+		mCameras[input.InputId].target = position.Position;
+		mCameras[input.InputId].position = Vector3Add(position.Position, CameraOffset);
+		UpdateCamera(&mCameras[input.InputId]);
+		break;
 	}
 
-	Camera backgroundCamera = mMainCamera;
-	float targetX = mMainCamera.target.x + SpaceData::LengthX * 0.5f;
-	float targetZ = mMainCamera.target.z + SpaceData::LengthZ * 0.5f;
-	if (targetX >= SpaceData::LengthX) {
-		targetX -= SpaceData::LengthX;
+	for (size_t i = 0; i < mViews; ++i) {
+		RenderView(mCameras[i], mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i], mRegistry, gameTime);
 	}
-	if (targetZ >= SpaceData::LengthZ) {
-		targetZ -= SpaceData::LengthZ;
-	}
-	backgroundCamera.target = { targetX, 0.f, targetZ };
-	backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraOffset, 2.25f));
-
-	int width = GetScreenWidth();
-	int height = GetScreenHeight();
-	Rectangle targetRect = { 0, 0, (float)width, (float)-height };
-
-	Rectangle sourceRect = { 0, 0, (float)width, (float)height };	// TODO: Name makes no sense?
-
-	BeginTextureMode(mBulletTexture);
-	ClearBackground(BLANK);
-	BeginMode3D(backgroundCamera);
-	DrawBulletsToCurrentTarget(backgroundCamera, mRegistry, gameTime);
-	EndBlendMode();
-	EndMode3D();
-	EndTextureMode();
-
-	BeginTextureMode(mBackgroundTexture);
-	ClearBackground(BLANK);
-	BeginMode3D(backgroundCamera);
-	DrawToCurrentTarget(backgroundCamera, mRegistry);
-	EndMode3D();
-	EndTextureMode();
-
-	BeginTextureMode(mBulletTexture);
-	BeginMode3D(mMainCamera);
-	DrawBulletsToCurrentTarget(mMainCamera, mRegistry, gameTime);
-	EndBlendMode();
-	EndMode3D();
-	EndTextureMode();
-
-	BeginTextureMode(mScreenTexture);
-	ClearBackground({ 0, 41, 96, 255 });
-	DrawTextureRec(mBackgroundTexture.texture, targetRect, Vector2Zero(), DARKGRAY);
-	BeginMode3D(mMainCamera);
-	DrawToCurrentTarget(mMainCamera, mRegistry);
-	EndMode3D();
-	BeginBlendMode(BLEND_ADDITIVE);
-	DrawTextureRec(mBulletTexture.texture, targetRect, Vector2Zero(), WHITE);
-	EndBlendMode();
-	EndTextureMode();
 
 	BeginDrawing();
-	DrawTextureRec(mScreenTexture.texture, targetRect, Vector2Zero(), WHITE);
+	ClearBackground(BLANK);
+	for (size_t i = 0; i < mViews; ++i) {
+		Rectangle target = { 0, 0, mViewPorts[i].width, -mViewPorts[i].height };
+		DrawTextureRec(mViewPortTextures[i].texture, target, { mViewPorts[i].x, mViewPorts[i].y }, WHITE);
+	}
 	DrawFPS(10, 10);
 	EndDrawing();
 }

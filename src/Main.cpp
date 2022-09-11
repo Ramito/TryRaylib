@@ -67,6 +67,10 @@ void main() {
 	SetupWindow();
 	auto gameInput = std::make_shared<std::array<GameInput, 4>>();
 	auto gameCameras = std::make_shared<GameCameras>();
+	auto viewPorts = std::make_shared<ViewPorts>();
+
+	(*viewPorts)[0] = { 0, 0, (float)GetScreenWidth() / 2, (float)GetScreenHeight() };
+	(*viewPorts)[1] = { (float)GetScreenWidth() / 2, 0, (float)GetScreenWidth() / 2, (float)GetScreenHeight() };
 
 	SimDependencies simDependencies;
 	entt::registry& simRegistrry = simDependencies.CreateDependency<entt::registry>();
@@ -78,8 +82,9 @@ void main() {
 	RenderDependencies renderDependencies;
 	simDependencies.ShareDependencyWith<entt::registry>(renderDependencies);
 	renderDependencies.AddDependency(gameCameras);
+	renderDependencies.AddDependency(viewPorts);
 
-	Render render(0, renderDependencies);	// Renderer for player 0
+	Render render(2, renderDependencies);
 
 	double gameStartTime = GetTime();
 	uint32_t simTicks = 0;

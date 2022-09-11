@@ -6,20 +6,22 @@
 #include <raylib.h>
 
 using GameCameras = std::array<Camera, 4>;
+using ViewPorts = std::array<Rectangle, 4>;
 
 struct RenderFlag {};
 using RenderDependencies = DependencyContainer<RenderFlag>;
 
 class Render {
 public:
-	Render(uint32_t viewID, RenderDependencies& dependencies);
+	Render(uint32_t views, RenderDependencies& dependencies);
 	~Render();
 	void Draw(float gameTime);
 private:
-	uint32_t mViewID;
+	uint32_t mViews;
 	entt::registry& mRegistry;
-	Camera& mMainCamera;
-	RenderTexture mBackgroundTexture;
-	RenderTexture mBulletTexture;
-	RenderTexture mScreenTexture;
+	std::array<Camera, 4>& mCameras;
+	std::array<Rectangle, 4>& mViewPorts;
+	std::array<RenderTexture, 4> mBackgroundTextures;
+	std::array<RenderTexture, 4> mBulletTextures;
+	std::array<RenderTexture, 4> mViewPortTextures;
 };
