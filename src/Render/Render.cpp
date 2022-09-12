@@ -7,7 +7,8 @@
 #include <rlgl.h>
 #include <optional>
 
-constexpr Vector3 CameraOffset = { -10.f, 25.f, -10.f };
+constexpr Vector3 TargetOffset = { -3.5f, 0.f, -3.5f };
+constexpr Vector3 CameraOffset = { -11.f, 42.f, -11.f };
 
 Render::Render(uint32_t views, RenderDependencies& dependencies) : mViews(views)
 , mRegistry(dependencies.GetDependency<entt::registry>())
@@ -15,11 +16,11 @@ Render::Render(uint32_t views, RenderDependencies& dependencies) : mViews(views)
 , mViewPorts(dependencies.GetDependency<ViewPorts>())
 {
 	for (Camera& camera : mCameras) {
-		camera.target = { 0.f, 0.f, 0.f };
+		camera.target = TargetOffset;
 		camera.position = CameraOffset;
 		camera.projection = CAMERA_PERSPECTIVE;
 		camera.up = { 0.f, 1.f, 0.f };
-		camera.fovy = 70.f;
+		camera.fovy = 60.f;
 		SetCameraMode(camera, CAMERA_CUSTOM);
 	}
 
@@ -206,7 +207,7 @@ namespace {
 			targetZ -= SpaceData::LengthZ;
 		}
 		backgroundCamera.target = { targetX, 0.f, targetZ };
-		backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraOffset, 2.25f));
+		backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraOffset, 1.75f));
 
 		BeginTextureMode(bulletTexture);
 		ClearBackground(BLANK);
@@ -234,7 +235,7 @@ namespace {
 
 		BeginTextureMode(viewTexture);
 		ClearBackground({ 0, 41, 96, 255 });
-		DrawTextureRec(backgroundTexture.texture, target, Vector2Zero(), DARKGRAY);
+		DrawTextureRec(backgroundTexture.texture, target, Vector2Zero(), GRAY);
 		BeginMode3D(camera);
 		DrawToCurrentTarget(camera, viewPort, registry);
 		EndMode3D();
@@ -249,8 +250,9 @@ void Render::Draw(float gameTime) {
 	for (auto playerEntity : mRegistry.view<PositionComponent, SpaceshipInputComponent>()) {
 		auto& input = mRegistry.get<SpaceshipInputComponent>(playerEntity);
 		auto& position = mRegistry.get<PositionComponent>(playerEntity);
-		mCameras[input.InputId].target = position.Position;
-		mCameras[input.InputId].position = Vector3Add(position.Position, CameraOffset);
+		const Vector3 target = Vector3Add(position.Position, TargetOffset);
+		mCameras[input.InputId].target = target;
+		mCameras[input.InputId].position = Vector3Add(target, CameraOffset);
 	}
 
 	for (size_t i = 0; i < mViews; ++i) {
@@ -262,6 +264,9 @@ void Render::Draw(float gameTime) {
 	for (size_t i = 0; i < mViews; ++i) {
 		Rectangle target = { 0, 0, mViewPorts[i].width, -mViewPorts[i].height };
 		DrawTextureRec(mViewPortTextures[i].texture, target, { mViewPorts[i].x, mViewPorts[i].y }, WHITE);
+	}
+	if (mViews > 1) {
+		DrawLine(mViewPorts[1].x, mViewPorts[1].y, mViewPorts[1].x, mViewPorts[1].height, WHITE);
 	}
 	DrawFPS(10, 10);
 	EndDrawing();

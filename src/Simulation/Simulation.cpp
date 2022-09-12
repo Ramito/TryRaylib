@@ -263,7 +263,7 @@ void Simulation::Simulate() {
 				float randZ = normal(mRandomGenerator);
 				Vector3 randomVelocity = Vector3Scale({ randX, randY, randZ }, RandomModule);
 				mRegistry.emplace<VelocityComponent>(particleEntity, Vector3Add(baseVelocity, randomVelocity));
-				float lifetime = 15.f * (UniformDistribution(mRandomGenerator) + UniformDistribution(mRandomGenerator));
+				float lifetime = 14.f * (UniformDistribution(mRandomGenerator) + UniformDistribution(mRandomGenerator));
 				mRegistry.emplace<ParticleComponent>(particleEntity, lifetime);
 			}
 	};
@@ -492,7 +492,7 @@ void Simulation::Simulate() {
 		mRegistry.emplace<PositionComponent>(explosion, position);
 		mRegistry.emplace<VelocityComponent>(explosion, velocity);
 		mRegistry.emplace<ExplosionComponent>(explosion, GameTime, radius);
-		for (size_t i = 0; i < 1000; ++i) {
+		for (size_t i = 0; i < 500; ++i) {
 			auto particle = mRegistry.create();
 			std::normal_distribution normal(0.f, 1.f);
 			float x = normal(mRandomGenerator);
@@ -501,7 +501,7 @@ void Simulation::Simulate() {
 			const Vector3 radial = Vector3Normalize({ x,y,z });
 			mRegistry.emplace<PositionComponent>(particle, Vector3Add(position, Vector3Scale(radial, 0.1f)));
 			mRegistry.emplace<VelocityComponent>(particle, Vector3Add(velocity, Vector3Scale(radial, deltaTime * ExplosionData::ParticleForce)));
-			mRegistry.emplace<ParticleComponent>(particle, (UniformDistribution(mRandomGenerator) + UniformDistribution(mRandomGenerator)) * 15.f);
+			mRegistry.emplace<ParticleComponent>(particle, (UniformDistribution(mRandomGenerator) + UniformDistribution(mRandomGenerator)) * 14.f);
 			mRegistry.emplace<ParticleDragComponent>(particle);
 		}
 	};
