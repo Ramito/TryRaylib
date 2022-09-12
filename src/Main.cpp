@@ -68,22 +68,24 @@ void main() {
 	auto gameCameras = std::make_shared<GameCameras>();
 	auto viewPorts = std::make_shared<ViewPorts>();
 
-	(*viewPorts)[0] = { 0, 0, (float)GetScreenWidth() / 2, (float)GetScreenHeight() };
-	(*viewPorts)[1] = { (float)GetScreenWidth() / 2, 0, (float)GetScreenWidth() / 2, (float)GetScreenHeight() };
+	constexpr uint32_t Players = 2;
+
+	(*viewPorts)[0] = { 0, 0, (float)GetScreenWidth() / Players, (float)GetScreenHeight() };
+	(*viewPorts)[1] = { (float)GetScreenWidth() / Players, 0, (float)GetScreenWidth() / Players, (float)GetScreenHeight() };
 
 	SimDependencies simDependencies;
 	entt::registry& simRegistrry = simDependencies.CreateDependency<entt::registry>();
 	simDependencies.AddDependency(gameInput);	// This should be owned elsewhere
 
 	Simulation sim(simDependencies);
-	sim.Init();
+	sim.Init(Players);
 
 	RenderDependencies renderDependencies;
 	simDependencies.ShareDependencyWith<entt::registry>(renderDependencies);
 	renderDependencies.AddDependency(gameCameras);
 	renderDependencies.AddDependency(viewPorts);
 
-	Render render(2, renderDependencies);
+	Render render(Players, renderDependencies);
 
 	double gameStartTime = GetTime();
 	uint32_t simTicks = 0;
@@ -92,6 +94,9 @@ void main() {
 		double currentGameTime = GetTime();
 		double lastSimTickTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
 		if (currentGameTime <= lastSimTickTime) {
+			if (ticksPerPass > 1) {
+				ticksPerPass -= 1;
+			}
 			continue;
 		}
 		UpdateInput(*gameCameras, *gameInput);
@@ -103,9 +108,6 @@ void main() {
 		lastSimTickTime += SimTimeData::DeltaTime * ticksPerPass;
 		if (lastSimTickTime < currentGameTime) {
 			ticksPerPass += 1;
-		}
-		else {
-			ticksPerPass = 1;
 		}
 		render.Draw(sim.GameTime);
 	}

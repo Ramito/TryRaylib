@@ -13,7 +13,7 @@ class Simulation {
 public:
 	Simulation(const SimDependencies& dependencies);
 
-	void Init();
+	void Init(uint32_t players);
 	void Tick();
 
 	float GameTime;

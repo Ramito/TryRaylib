@@ -19,22 +19,25 @@ static void MakeAsteroid(entt::registry& registry, float radius, const Vector3 p
 }
 
 static void SpawnSpaceship(entt::registry& registry, uint32_t inputID) {
+	const float x = inputID * SpaceData::LengthX / 2.f;
+	const float z = inputID * SpaceData::LengthZ / 2.f;
 	entt::entity player = registry.create();
 	registry.emplace<SpaceshipInputComponent>(player, inputID, GameInput{ 0.f, 0.f, false });
 	registry.emplace<SteerComponent>(player, 0.f);
 	registry.emplace<ThrustComponent>(player, 0.f);
-	registry.emplace<PositionComponent>(player, 0.f, 0.f, 0.f);
+	registry.emplace<PositionComponent>(player, x, 0.f, z);
 	registry.emplace<VelocityComponent>(player, 0.f, 0.f, 0.f);
 	registry.emplace<OrientationComponent>(player, QuaternionIdentity());
 	registry.emplace<GunComponent>(player, 0.f, 0u);
 }
 
-void Simulation::Init() {
+void Simulation::Init(uint32_t players) {
 	mRegistry.clear();
 	mRegistry.reserve(64000);
 
-	SpawnSpaceship(mRegistry, 0u);
-	SpawnSpaceship(mRegistry, 1u);
+	for (uint32_t player = 0; player < players; ++player) {
+		SpawnSpaceship(mRegistry, player);
+	}
 
 	std::uniform_real_distribution<float> xDistribution(0.f, SpaceData::LengthX);
 	std::uniform_real_distribution<float> zDistribution(0.f, SpaceData::LengthZ);

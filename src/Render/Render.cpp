@@ -92,8 +92,11 @@ namespace {
 
 	CameraFrustum ComputeFrustum(const Camera& camera, const Rectangle& viewPort) {
 
-		float minX = viewPort.width / 2;
-		float minY = 0.f;
+		int screenWidth = GetScreenWidth();
+		int screenHeight = GetScreenHeight();
+
+		float minX = (screenWidth - viewPort.width) / 2;
+		float minY = (screenHeight - viewPort.height) / 2;
 		float maxX = minX + viewPort.width;
 		float maxY = minY + viewPort.height;
 
