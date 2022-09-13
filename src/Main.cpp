@@ -28,9 +28,9 @@ void UpdateInput(const std::array<Camera, 4>& cameras, std::array<GameInput, 4>&
 		bool fire = false;
 		Vector2 input = { 0.f,0.f };
 		if (IsGamepadAvailable(idx)) {
-			input.x = GetGamepadAxisMovement(0, 0);
-			input.y = -GetGamepadAxisMovement(0, 1);
-			fire = IsGamepadButtonDown(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+			input.x = GetGamepadAxisMovement(idx, 0);
+			input.y = -GetGamepadAxisMovement(idx, 1);
+			fire = IsGamepadButtonDown(idx, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
 		}
 		else if (idx == 0)
 		{
