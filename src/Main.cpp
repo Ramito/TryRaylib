@@ -98,6 +98,8 @@ void main() {
 	bool startP2 = false;
 	float menuAlpha = 1.f;
 
+	GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
+
 	while (!WindowShouldClose()) {
 		if (startP1) {
 			sim = std::make_unique<Simulation>(simDependencies);
@@ -160,10 +162,10 @@ void main() {
 		}
 		float width = GetScreenWidth();
 		float height = GetScreenHeight();
-		if (GuiButton({ width * 0.25f, height * 0.5f, width * 0.5f, height * 0.2f }, "HI1")) {
+		if (GuiButton({ width * 0.25f, height * 0.5f, width * 0.5f, height * 0.2f }, "1 Player")) {
 			startP1 = menuOn && true;
 		}
-		if (GuiButton({ width * 0.25f, height * 0.75f, width * 0.5f, height * 0.2f }, "HI2")) {
+		if (GuiButton({ width * 0.25f, height * 0.75f, width * 0.5f, height * 0.2f }, "2 Players")) {
 			startP2 = menuOn && true;
 		}
 		menuOn = menuOn && !startP1 && !startP2;
