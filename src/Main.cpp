@@ -7,6 +7,7 @@
 #include "Components.h"
 #include "Simulation/Simulation.h"
 #include "Render/Render.h"
+#include "raygui.h"
 
 static void SetupWindow() {
 	SetTargetFPS(SimTimeData::TargetFPS);
@@ -60,35 +61,68 @@ void UpdateInput(const std::array<Camera, 4>& cameras, std::array<GameInput, 4>&
 	}
 }
 
+static void SetViewports(size_t count, ViewPorts& viewPorts) {
+	viewPorts[0] = { 0, 0, (float)GetScreenWidth() / count, (float)GetScreenHeight() };
+	viewPorts[1] = { (float)GetScreenWidth() / count, 0, (float)GetScreenWidth() / count, (float)GetScreenHeight() };
+}
+
 void main() {
 	SetupWindow();
 	auto gameInput = std::make_shared<std::array<GameInput, 4>>();
 	auto gameCameras = std::make_shared<GameCameras>();
 	auto viewPorts = std::make_shared<ViewPorts>();
 
-	constexpr uint32_t Players = 2;
-
-	(*viewPorts)[0] = { 0, 0, (float)GetScreenWidth() / Players, (float)GetScreenHeight() };
-	(*viewPorts)[1] = { (float)GetScreenWidth() / Players, 0, (float)GetScreenWidth() / Players, (float)GetScreenHeight() };
+	SetViewports(1, *viewPorts);
 
 	SimDependencies simDependencies;
 	entt::registry& simRegistrry = simDependencies.CreateDependency<entt::registry>();
 	simDependencies.AddDependency(gameInput);	// This should be owned elsewhere
 
-	Simulation sim(simDependencies);
-	sim.Init(Players);
+	std::unique_ptr<Simulation> sim = std::make_unique<Simulation>(simDependencies);
+	sim->Init(0);
 
 	RenderDependencies renderDependencies;
 	simDependencies.ShareDependencyWith<entt::registry>(renderDependencies);
 	renderDependencies.AddDependency(gameCameras);
 	renderDependencies.AddDependency(viewPorts);
 
-	Render render(Players, renderDependencies);
+
+	std::unique_ptr<Render> render = std::make_unique<Render>(1, renderDependencies);
 
 	double gameStartTime = GetTime();
 	uint32_t simTicks = 0;
 	uint32_t ticksPerPass = 1;
+
+	bool menuOn = true;
+	bool startP1 = false;
+	bool startP2 = false;
+	float menuAlpha = 1.f;
+
 	while (!WindowShouldClose()) {
+		if (startP1) {
+			sim = std::make_unique<Simulation>(simDependencies);
+			sim->Init(1);
+
+			SetViewports(1, *viewPorts);
+			render = std::make_unique<Render>(1, renderDependencies);
+
+			startP1 = false;
+		}
+		if (startP2) {
+			sim = std::make_unique<Simulation>(simDependencies);
+			sim->Init(2);
+
+			SetViewports(2, *viewPorts);
+			render = std::make_unique<Render>(2, renderDependencies);
+
+			startP2 = false;
+		}
+		if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_RIGHT))
+		{
+			menuOn = !menuOn;
+		}
+
+
 		double currentGameTime = GetTime();
 		double lastSimTickTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
 		if (currentGameTime <= lastSimTickTime) {
@@ -100,14 +134,40 @@ void main() {
 		UpdateInput(*gameCameras, *gameInput);
 		uint32_t counter = ticksPerPass;
 		while (counter-- > 0) {
-			sim.Tick();
+			sim->Tick();
 		}
 		simTicks += ticksPerPass;
 		lastSimTickTime += SimTimeData::DeltaTime * ticksPerPass;
 		if (lastSimTickTime < currentGameTime) {
 			ticksPerPass += 1;
 		}
-		render.Draw(sim.GameTime);
+		render->DrawScreenTexture(sim->GameTime);
+
+
+		BeginDrawing();
+		DrawTextureRec(render->ScreenTexture(), { 0.f, 0.f, (float)GetScreenWidth(), -(float)GetScreenHeight() }, {}, WHITE);
+		if (menuOn) {
+			GuiEnable();
+			menuAlpha = std::min(1.f, menuAlpha + 0.05f);
+			GuiFade(menuAlpha);
+		}
+		else {
+			menuAlpha = std::max(0.f, menuAlpha - 0.025f);
+			GuiFade(menuAlpha);
+			if (menuAlpha == 0.f) {
+				GuiDisable();
+			}
+		}
+		float width = GetScreenWidth();
+		float height = GetScreenHeight();
+		if (GuiButton({ width * 0.25f, height * 0.5f, width * 0.5f, height * 0.2f }, "HI1")) {
+			startP1 = menuOn && true;
+		}
+		if (GuiButton({ width * 0.25f, height * 0.75f, width * 0.5f, height * 0.2f }, "HI2")) {
+			startP2 = menuOn && true;
+		}
+		menuOn = menuOn && !startP1 && !startP2;
+		EndDrawing();
 	}
 	CloseWindow();
 }

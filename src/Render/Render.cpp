@@ -31,6 +31,8 @@ Render::Render(uint32_t views, RenderDependencies& dependencies) : mViews(views)
 		mBulletTextures[i] = LoadRenderTexture(width, height);
 		mViewPortTextures[i] = LoadRenderTexture(width, height);
 	}
+
+	mScreenTexture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 }
 
 Render::~Render() {
@@ -39,6 +41,7 @@ Render::~Render() {
 		UnloadRenderTexture(mBulletTextures[i]);
 		UnloadRenderTexture(mViewPortTextures[i]);
 	}
+	UnloadRenderTexture(mScreenTexture);
 }
 
 static void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
@@ -246,7 +249,7 @@ namespace {
 	}
 }
 
-void Render::Draw(float gameTime) {
+void Render::DrawScreenTexture(float gameTime) {
 	for (auto playerEntity : mRegistry.view<PositionComponent, SpaceshipInputComponent>()) {
 		auto& input = mRegistry.get<SpaceshipInputComponent>(playerEntity);
 		auto& position = mRegistry.get<PositionComponent>(playerEntity);
@@ -259,7 +262,7 @@ void Render::Draw(float gameTime) {
 		RenderView(mCameras[i], mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i], mRegistry, gameTime);
 	}
 
-	BeginDrawing();
+	BeginTextureMode(mScreenTexture);
 	ClearBackground(BLANK);
 	for (size_t i = 0; i < mViews; ++i) {
 		Rectangle target = { 0, 0, mViewPorts[i].width, -mViewPorts[i].height };
@@ -269,6 +272,10 @@ void Render::Draw(float gameTime) {
 		DrawLine(mViewPorts[1].x, mViewPorts[1].y, mViewPorts[1].x, mViewPorts[1].height, WHITE);
 	}
 	DrawFPS(10, 10);
-	EndDrawing();
+	EndTextureMode();
+}
+
+const Texture& Render::ScreenTexture() const {
+	return mScreenTexture.texture;
 }
 

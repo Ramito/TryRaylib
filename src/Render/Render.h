@@ -15,7 +15,8 @@ class Render {
 public:
 	Render(uint32_t views, RenderDependencies& dependencies);
 	~Render();
-	void Draw(float gameTime);
+	void DrawScreenTexture(float gameTime);
+	const Texture& ScreenTexture() const;
 private:
 	uint32_t mViews;
 	entt::registry& mRegistry;
@@ -24,4 +25,5 @@ private:
 	std::array<RenderTexture, 4> mBackgroundTextures;
 	std::array<RenderTexture, 4> mBulletTextures;
 	std::array<RenderTexture, 4> mViewPortTextures;
+	RenderTexture mScreenTexture;
 };
