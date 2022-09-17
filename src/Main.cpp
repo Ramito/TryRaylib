@@ -7,7 +7,7 @@
 #include "Components.h"
 #include "Simulation/Simulation.h"
 #include "Render/Render.h"
-#include "raygui.h"
+#include "Menu.h"
 
 static void SetupWindow() {
 	SetTargetFPS(SimTimeData::TargetFPS);
@@ -93,37 +93,16 @@ void main() {
 	uint32_t simTicks = 0;
 	uint32_t ticksPerPass = 1;
 
-	bool menuOn = true;
-	bool startP1 = false;
-	bool startP2 = false;
-	float menuAlpha = 1.f;
-
-	GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
+	auto startGameAction = [&](uint32_t players) {
+		sim = std::make_unique<Simulation>(simDependencies);
+		sim->Init(players);
+		SetViewports(players, *viewPorts);
+		render = std::make_unique<Render>(players, renderDependencies);
+	};
+	Menu menu;
 
 	while (!WindowShouldClose()) {
-		if (startP1) {
-			sim = std::make_unique<Simulation>(simDependencies);
-			sim->Init(1);
-
-			SetViewports(1, *viewPorts);
-			render = std::make_unique<Render>(1, renderDependencies);
-
-			startP1 = false;
-		}
-		if (startP2) {
-			sim = std::make_unique<Simulation>(simDependencies);
-			sim->Init(2);
-
-			SetViewports(2, *viewPorts);
-			render = std::make_unique<Render>(2, renderDependencies);
-
-			startP2 = false;
-		}
-		if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_RIGHT))
-		{
-			menuOn = !menuOn;
-		}
-
+		menu.UpdateMenu(startGameAction);
 
 		double currentGameTime = GetTime();
 		double lastSimTickTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
@@ -145,30 +124,9 @@ void main() {
 		}
 		render->DrawScreenTexture(sim->GameTime);
 
-
 		BeginDrawing();
 		DrawTextureRec(render->ScreenTexture(), { 0.f, 0.f, (float)GetScreenWidth(), -(float)GetScreenHeight() }, {}, WHITE);
-		if (menuOn) {
-			GuiEnable();
-			menuAlpha = std::min(1.f, menuAlpha + 0.05f);
-			GuiFade(menuAlpha);
-		}
-		else {
-			menuAlpha = std::max(0.f, menuAlpha - 0.025f);
-			GuiFade(menuAlpha);
-			if (menuAlpha == 0.f) {
-				GuiDisable();
-			}
-		}
-		float width = GetScreenWidth();
-		float height = GetScreenHeight();
-		if (GuiButton({ width * 0.25f, height * 0.5f, width * 0.5f, height * 0.2f }, "1 Player")) {
-			startP1 = menuOn && true;
-		}
-		if (GuiButton({ width * 0.25f, height * 0.75f, width * 0.5f, height * 0.2f }, "2 Players")) {
-			startP2 = menuOn && true;
-		}
-		menuOn = menuOn && !startP1 && !startP2;
+		menu.DrawMenu();
 		EndDrawing();
 	}
 	CloseWindow();
