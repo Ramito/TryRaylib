@@ -478,10 +478,16 @@ void Simulation::Simulate() {
 				return false;
 			}
 
-			static_assert(SpaceshipData::CollisionRadius < SpaceshipData::ParticleCollisionRadius);
 			const float distanceSqr = Vector3LengthSqr(toCollider);
 			if (distanceSqr > collider.Radius * collider.Radius) {
 				return false;
+			}
+
+			static_assert(SpaceshipData::CollisionRadius < SpaceshipData::ParticleCollisionRadius);
+			if (mRegistry.all_of<SpaceshipInputComponent>(collider.Entity) && mRegistry.all_of<BulletComponent>(particle)) {
+				if (distanceSqr > SpaceshipData::CollisionRadius * SpaceshipData::CollisionRadius) {
+					return false;
+				}
 			}
 
 			ParticleCollisionComponent& particleCollision = mRegistry.get_or_emplace<ParticleCollisionComponent>(particle);
