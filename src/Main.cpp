@@ -11,8 +11,15 @@
 
 static void SetupWindow() {
 	SetTargetFPS(SimTimeData::TargetFPS);
-	InitWindow(2560, 1440, "Game");
-	SetConfigFlags(ConfigFlags::FLAG_WINDOW_UNDECORATED | ConfigFlags::FLAG_WINDOW_MAXIMIZED | ConfigFlags::FLAG_WINDOW_TOPMOST);
+	int targetWidth = 2560;
+	int targetHeight = 1440;
+	InitWindow(targetWidth, targetHeight, "Game");
+	SetConfigFlags(ConfigFlags::FLAG_WINDOW_UNDECORATED);
+
+	if (GetMonitorWidth(GetCurrentMonitor()) <= targetWidth) {
+		ToggleFullscreen();
+		SetWindowSize(GetScreenWidth(), GetScreenHeight());
+	}
 }
 
 void UpdateInput(const std::array<Camera, 4>& cameras, std::array<GameInput, 4>& gameInputs) {
