@@ -3,6 +3,23 @@
 #include "raygui.h"
 
 void Menu::UpdateMenu(std::function<void(uint32_t)>&& startgameAction) {
+	mPadState.Active = mMenuActive && IsGamepadAvailable(0);
+	if (mPadState.Active) {
+		constexpr int SelectionCount = 2;
+		if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_FACE_DOWN)) {
+			mPadState.Selection += 1;
+			if (mPadState.Selection >= SelectionCount) {
+				mPadState.Selection -= SelectionCount;
+			}
+		}
+		if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_FACE_UP)) {
+			mPadState.Selection -= 1;
+			if (mPadState.Selection < 0) {
+				mPadState.Selection += SelectionCount;
+			}
+		}
+	}
+
 	if (mP1Button) {
 		startgameAction(1);
 		mP1Button = false;
@@ -17,26 +34,62 @@ void Menu::UpdateMenu(std::function<void(uint32_t)>&& startgameAction) {
 	}
 }
 void Menu::DrawMenu() {
-	GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
 	if (mMenuActive) {
 		GuiEnable();
 		mAlpha = std::min(1.f, mAlpha + 0.05f);
 		GuiFade(mMenuActive);
 	}
 	else {
-		mMenuActive = std::max(0.f, mMenuActive - 0.025f);
-		GuiFade(mMenuActive);
-		if (mMenuActive == 0.f) {
+		mAlpha = std::max(0.f, mAlpha - 0.025f);
+		GuiFade(mAlpha);
+		if (mAlpha == 0.f) {
 			GuiDisable();
 		}
 	}
 	float width = GetScreenWidth();
 	float height = GetScreenHeight();
-	if (GuiButton({ width * 0.25f, height * 0.5f, width * 0.5f, height * 0.2f }, "1 Player")) {
+	float buttonWidth = width / 3;
+	float buttonHeight = height / 5;
+
+	Rectangle text = { 0, 0, width, height / 2 };
+	GuiSetStyle(DEFAULT, TEXT_SPACING, 10);
+	GuiSetStyle(DEFAULT, TEXT_SIZE, 200);
+	Color textColor = GOLD;
+	textColor.a = mAlpha * 255;
+	GuiDrawText("BLAST N\' THRUST", text, TEXT_ALIGN_CENTER, textColor);
+
+	Rectangle button = { (width - buttonWidth) * 0.5f, height * 0.5f, buttonWidth, buttonHeight };
+
+	GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
+
+	if (mPadState.Active) {
+		GuiLock();
+	}
+
+	if (mPadState.Selection == 0 && mPadState.Active) {
+		GuiSetState(STATE_FOCUSED);
+		mP1Button = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+	}
+	else {
+		GuiSetState(STATE_NORMAL);
+	}
+	if (GuiButton(button, "1 Player")) {
 		mP1Button = mMenuActive && true;
 	}
-	if (GuiButton({ width * 0.25f, height * 0.75f, width * 0.5f, height * 0.2f }, "2 Players")) {
+
+	button.y += 1.25f * buttonHeight;
+
+	if (mPadState.Selection == 1 && mPadState.Active) {
+		GuiSetState(STATE_FOCUSED);
+		mP2Button = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+	}
+	else {
+		GuiSetState(STATE_NORMAL);
+	}
+	if (GuiButton(button, "2 Players")) {
 		mP2Button = mMenuActive && true;
 	}
 	mMenuActive = mMenuActive && !mP1Button && !mP2Button;
+
+	GuiUnlock();
 }

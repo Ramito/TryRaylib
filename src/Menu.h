@@ -8,6 +8,12 @@ public:
 	void DrawMenu();
 
 private:
+	struct GamepadState {
+		bool Active;
+		int Selection = 0;
+	};
+	GamepadState mPadState;
+
 	bool mMenuActive = true;
 	bool mP1Button = false;
 	bool mP2Button = false;
