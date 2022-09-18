@@ -349,11 +349,21 @@ void Simulation::Simulate() {
 	{
 		const float radius = asteroidComponent.Radius;
 		const Vector2 flatPosition = { positionComponent.Position.x, positionComponent.Position.z };
-		Vector2 min = { flatPosition.x - radius, flatPosition.y - radius };
-		Vector2 max = { flatPosition.x + radius, flatPosition.y + radius };
-		mSpatialPartition.InsertDeferred(asteroid, min, max);
+		const Vector2 min = { flatPosition.x - radius, flatPosition.y - radius };
+		const Vector2 max = { flatPosition.x + radius, flatPosition.y + radius };
+		mSpatialPartition.InsertDeferred({ asteroid, radius }, min, max);
 	};
 	asteroidView.each(partitionAsteroids);
+
+	auto playerCollisionView = mRegistry.view<PositionComponent, SpaceshipInputComponent>();
+	for (auto spaceship : playerCollisionView) {
+		const Vector3& position = mRegistry.get<PositionComponent>(spaceship).Position;
+		const Vector2 flatPosition = { position.x, position.z };
+		constexpr float radius = std::max(SpaceshipData::CollisionRadius, SpaceshipData::ParticleCollisionRadius);
+		const Vector2 min = { flatPosition.x - radius, flatPosition.y - radius };
+		const Vector2 max = { flatPosition.x + radius, flatPosition.y + radius };
+		mSpatialPartition.InsertDeferred({ spaceship, radius }, min, max);
+	}
 
 	mSpatialPartition.FlushInsertions();
 
@@ -380,14 +390,14 @@ void Simulation::Simulate() {
 		return Vector3{ gapX, to.y - from.y, gapZ };
 	};
 
-	auto collisionHandler = [&](entt::entity asteroid1, entt::entity asteroid2) {
-		const Vector3& position1 = mRegistry.get<PositionComponent>(asteroid1).Position;
-		const Vector3& position2 = mRegistry.get<PositionComponent>(asteroid2).Position;
+	auto collisionHandler = [&](CollisionPayload collider1, CollisionPayload collider2) {
+		const Vector3& position1 = mRegistry.get<PositionComponent>(collider1.Entity).Position;
+		const Vector3& position2 = mRegistry.get<PositionComponent>(collider2.Entity).Position;
 
 		const Vector3 gap = findVectorGap(position1, position2);
 
-		Vector3& velocity1 = mRegistry.get<VelocityComponent>(asteroid1).Velocity;
-		Vector3& velocity2 = mRegistry.get<VelocityComponent>(asteroid2).Velocity;
+		Vector3& velocity1 = mRegistry.get<VelocityComponent>(collider1.Entity).Velocity;
+		Vector3& velocity2 = mRegistry.get<VelocityComponent>(collider2.Entity).Velocity;
 		const Vector3 relativeVelocity = Vector3Subtract(velocity2, velocity1);
 
 		float projection = Vector3DotProduct(gap, relativeVelocity);
@@ -396,19 +406,43 @@ void Simulation::Simulate() {
 			return;
 		}
 
-		float radius1 = mRegistry.get<AsteroidComponent>(asteroid1).Radius;
-		float radius2 = mRegistry.get<AsteroidComponent>(asteroid2).Radius;
-		float minDistance = radius1 + radius2;
+		const float minDistance = collider1.Radius + collider2.Radius;
 
 		float distanceSq = gap.x * gap.x + gap.z * gap.z;
-		if (distanceSq < minDistance * minDistance) {
-			const float mass1 = radius1 * radius1 * radius1;
-			const float mass2 = radius2 * radius2 * radius2;
+		if (distanceSq > minDistance * minDistance) {
+			return;
+		}
+
+		bool isSpaceship1 = mRegistry.all_of<SpaceshipInputComponent>(collider1.Entity);
+		bool isSpaceship2 = mRegistry.all_of<SpaceshipInputComponent>(collider2.Entity);
+
+		if (!isSpaceship1 && !isSpaceship2) {
+			assert(mRegistry.all_of<AsteroidComponent>(collider1.Entity));
+			assert(mRegistry.all_of<AsteroidComponent>(collider2.Entity));
+			// Asteroid vs asteroid
+			const float mass1 = collider1.Radius * collider1.Radius * collider1.Radius;
+			const float mass2 = collider2.Radius * collider2.Radius * collider2.Radius;
 			const float massNormalizer = 2.f / (mass1 + mass2);
 
 			const Vector3 transferedvelocity = Vector3Scale(gap, projection / distanceSq);
 			velocity1 = Vector3Add(velocity1, Vector3Scale(transferedvelocity, mass2 * massNormalizer));
 			velocity2 = Vector3Subtract(velocity2, Vector3Scale(transferedvelocity, mass1 * massNormalizer));
+			return;
+		}
+
+		static_assert(SpaceshipData::CollisionRadius < SpaceshipData::ParticleCollisionRadius);
+		float revizedMinDistance = 0.f;
+		revizedMinDistance += (isSpaceship1) ? SpaceshipData::CollisionRadius : collider1.Radius;
+		revizedMinDistance += (isSpaceship2) ? SpaceshipData::CollisionRadius : collider2.Radius;
+
+		if (distanceSq > revizedMinDistance * revizedMinDistance) {
+			return;
+		}
+		if (isSpaceship1) {
+			DestroySpaceship(collider1.Entity, position1, velocity1);
+		}
+		if (isSpaceship2) {
+			DestroySpaceship(collider2.Entity, position2, velocity2);
 		}
 	};
 	mSpatialPartition.IteratePairs(collisionHandler);
@@ -433,27 +467,27 @@ void Simulation::Simulate() {
 
 	auto particleCollisionProcess = [&](entt::entity particle, const ParticleComponent&, const PositionComponent& positionComponent, VelocityComponent& velocityComponent)
 	{
-		auto particleCollisionHandler = [&](entt::entity asteroid) {
-			const Vector3& asteroidVelocity = mRegistry.get<VelocityComponent>(asteroid).Velocity;
-			const Vector3 impactVelocity = Vector3Subtract(velocityComponent.Velocity, asteroidVelocity);
+		auto particleCollisionHandler = [&](CollisionPayload collider) {
+			const Vector3& colliderVelocity = mRegistry.get<VelocityComponent>(collider.Entity).Velocity;
+			const Vector3 impactVelocity = Vector3Subtract(velocityComponent.Velocity, colliderVelocity);
 
-			const Vector3& asteroidPosition = mRegistry.get<PositionComponent>(asteroid).Position;
-			const Vector3 toAsteroid = findVectorGap(positionComponent.Position, asteroidPosition);
+			const Vector3& colliderPosition = mRegistry.get<PositionComponent>(collider.Entity).Position;
+			const Vector3 toCollider = findVectorGap(positionComponent.Position, colliderPosition);
 
-			if (Vector3DotProduct(impactVelocity, toAsteroid) <= 0.f) {
+			if (Vector3DotProduct(impactVelocity, toCollider) <= 0.f) {
 				return false;
 			}
 
-			const float radius = mRegistry.get<AsteroidComponent>(asteroid).Radius;
-			const float distanceSqr = Vector3LengthSqr(toAsteroid);
-			if (distanceSqr > radius * radius) {
+			static_assert(SpaceshipData::CollisionRadius < SpaceshipData::ParticleCollisionRadius);
+			const float distanceSqr = Vector3LengthSqr(toCollider);
+			if (distanceSqr > collider.Radius * collider.Radius) {
 				return false;
 			}
 
 			ParticleCollisionComponent& particleCollision = mRegistry.get_or_emplace<ParticleCollisionComponent>(particle);
-			particleCollision.ImpactNormal = Vector3Normalize(toAsteroid);
+			particleCollision.ImpactNormal = Vector3Normalize(toCollider);
 			particleCollision.NormalContactSpeed = abs(Vector3DotProduct(impactVelocity, particleCollision.ImpactNormal));
-			particleCollision.Collider = asteroid;
+			particleCollision.Collider = collider.Entity;
 
 			return true;
 		};
@@ -462,34 +496,6 @@ void Simulation::Simulate() {
 		mSpatialPartition.IterateNearby(flatPosition, flatPosition, particleCollisionHandler);
 	};
 	particleCollisionView.each(particleCollisionProcess);
-
-	auto playerCollisionView = mRegistry.view<PositionComponent, SpaceshipInputComponent>();
-
-	for (entt::entity spaceship : playerCollisionView) {
-		const Vector3& spaceshipPosition = mRegistry.get<PositionComponent>(spaceship).Position;
-		const Vector3& spaceshipVelocity = mRegistry.get<VelocityComponent>(spaceship).Velocity;
-		auto particleSpaceshipCollisionHandle = [&](entt::entity particle, const ParticleComponent&, const PositionComponent& positionComponent, VelocityComponent& velocityComponent)
-		{
-			const Vector3 impactVelocity = Vector3Subtract(velocityComponent.Velocity, spaceshipVelocity);
-			const Vector3 gapToSpaceship = findVectorGap(positionComponent.Position, spaceshipPosition);
-
-			if (Vector3DotProduct(impactVelocity, gapToSpaceship) <= 0.f) {
-				return false;
-			}
-
-			const float radius = mRegistry.all_of<BulletComponent>(particle) ? SpaceshipData::CollisionRadius : SpaceshipData::ParticleCollisionRadius;
-			const float distanceSqr = Vector3LengthSqr(gapToSpaceship);
-			if (distanceSqr > radius * radius) {
-				return false;
-			}
-
-			ParticleCollisionComponent& particleCollision = mRegistry.get_or_emplace<ParticleCollisionComponent>(particle);
-			particleCollision.ImpactNormal = Vector3Normalize(gapToSpaceship);
-			particleCollision.NormalContactSpeed = abs(Vector3DotProduct(impactVelocity, particleCollision.ImpactNormal));
-			particleCollision.Collider = spaceship;
-		};
-		particleCollisionView.each(particleSpaceshipCollisionHandle);
-	}
 
 	auto bulletPostCollisionView = mRegistry.view<ParticleCollisionComponent, BulletComponent, VelocityComponent>();
 	auto bulletPostCollisionProcess = [&](entt::entity bullet, ParticleCollisionComponent& collision, VelocityComponent& velocityComponent) {
@@ -513,51 +519,6 @@ void Simulation::Simulate() {
 	particlePostCollisionView.each(particlePostCollisionProcess);
 
 	mRegistry.clear<ParticleCollisionComponent>();
-
-
-
-	for (entt::entity spaceship : playerCollisionView) {
-		const Vector3& spaceshipPosition = mRegistry.get<PositionComponent>(spaceship).Position;
-		const Vector3& spaceshipVelocity = mRegistry.get<VelocityComponent>(spaceship).Velocity;
-
-		auto collisionChecker = [&](entt::entity asteroid) {
-			const float asteroidRadius = mRegistry.get<AsteroidComponent>(asteroid).Radius;
-			const Vector3 asteroidPosition = mRegistry.get<PositionComponent>(asteroid).Position;
-			const Vector3 gapToAsteroid = findVectorGap(spaceshipPosition, asteroidPosition);
-			const float distanceSqr = Vector3LengthSqr(gapToAsteroid);
-			const float collisionDistance = asteroidRadius + SpaceshipData::CollisionRadius;
-			if (distanceSqr < collisionDistance * collisionDistance) {
-				DestroySpaceship(spaceship, spaceshipPosition, spaceshipVelocity);
-				return true;
-			}
-			return false;
-		};
-
-		const Vector2 flatPosition = { spaceshipPosition.x, spaceshipPosition.z };
-		mSpatialPartition.IterateNearby(flatPosition, flatPosition, collisionChecker);
-	}
-
-	for (auto spaceshipItLeft = playerCollisionView.begin(); spaceshipItLeft != playerCollisionView.end(); ) {
-		entt::entity spaceship1 = *spaceshipItLeft;
-
-		const Vector3& spaceship1Position = mRegistry.get<PositionComponent>(spaceship1).Position;
-		const Vector3& spaceship1Velocity = mRegistry.get<VelocityComponent>(spaceship1).Velocity;
-
-		++spaceshipItLeft;
-		for (auto spaceshipItRight = spaceshipItLeft; spaceshipItRight != playerCollisionView.end(); ++spaceshipItRight) {
-			entt::entity spaceship2 = *spaceshipItRight;
-
-			const Vector3& spaceship2Position = mRegistry.get<PositionComponent>(spaceship2).Position;
-			const Vector3& spaceship2Velocity = mRegistry.get<VelocityComponent>(spaceship2).Velocity;
-
-			if (Vector3Distance(spaceship1Position, spaceship2Position) > SpaceshipData::CollisionRadius) {
-				continue;
-			}
-
-			DestroySpaceship(spaceship1, spaceship1Position, spaceship1Velocity);
-			DestroySpaceship(spaceship2, spaceship2Position, spaceship2Velocity);
-		}
-	}
 
 	auto hitAsteroidView = mRegistry.view<AsteroidComponent, BulletHitComponent>();
 	auto hitAsteroidProcess = [&](entt::entity asteroid, const AsteroidComponent& asteroidComponent, const BulletHitComponent& hitComponent) {
