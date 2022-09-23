@@ -233,36 +233,6 @@ void Simulation::Simulate() {
 	};
 	playerView.each(playerProcess);
 
-	auto shootView = mRegistry.view<PositionComponent, VelocityComponent, OrientationComponent, SpaceshipInputComponent, GunComponent>();
-	auto shootProcess = [this](const PositionComponent& positionComponent,
-		const VelocityComponent& velocityComponent,
-		const OrientationComponent& orientationComponent,
-		const SpaceshipInputComponent& inputComponent,
-		GunComponent& gunComponent) {
-			gunComponent.TimeSinceLastShot += deltaTime;
-			if (!inputComponent.Input.Fire) {
-				return;
-			}
-			if (gunComponent.TimeSinceLastShot < WeaponData::RateOfFire) {
-				return;
-			}
-			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
-			Vector3 offset = Vector3RotateByQuaternion(WeaponData::ShootBones[gunComponent.NextShotBone], orientationComponent.Quaternion);
-			Vector3 shotPosition = Vector3Add(positionComponent.Position, offset);
-			Vector3 shotVelocity = Vector3Add(velocityComponent.Velocity, Vector3Scale(forward, WeaponData::BulletSpeed));
-			entt::entity bullet = mRegistry.create();
-			mRegistry.emplace<BulletComponent>(bullet);
-			mRegistry.emplace<PositionComponent>(bullet, shotPosition);
-			mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Quaternion);
-			mRegistry.emplace<VelocityComponent>(bullet, shotVelocity);
-			mRegistry.emplace<ParticleComponent>(bullet, WeaponData::BulletLifetime);
-			gunComponent.NextShotBone += 1;
-			gunComponent.NextShotBone %= WeaponData::ShootBones.size();
-			gunComponent.TimeSinceLastShot = 0.f;
-
-	};
-	shootView.each(shootProcess);
-
 	auto thrustView = mRegistry.view<ThrustComponent, PositionComponent, VelocityComponent, OrientationComponent>();
 	auto thrustParticleProcess = [this](ThrustComponent& thrustComponent,
 		const PositionComponent& positionComponent,
@@ -447,7 +417,7 @@ void Simulation::Simulate() {
 	};
 	mSpatialPartition.IteratePairs(collisionHandler);
 
-	auto particleCollisionView = mRegistry.view<ParticleComponent, PositionComponent, VelocityComponent>();
+	auto particleCollisionView = mRegistry.view<ParticleComponent, PositionComponent, VelocityComponent>(entt::exclude<BulletComponent>);
 
 	// Assuming the number of simultaneous explosions is low
 	for (auto explosion : explosionView) {
@@ -502,6 +472,50 @@ void Simulation::Simulate() {
 		mSpatialPartition.IterateNearby(flatPosition, flatPosition, particleCollisionHandler);
 	};
 	particleCollisionView.each(particleCollisionProcess);
+
+	auto bulletCollisionView = mRegistry.view<BulletComponent, PositionComponent, VelocityComponent>();
+	auto bulletCollisionProcess = [&](entt::entity bullet, const PositionComponent& positionComponent, VelocityComponent& velocityComponent) {
+		auto bulletCollisionHandler = [&](CollisionPayload collider) {
+			const float radius = mRegistry.all_of<SpaceshipInputComponent>(collider.Entity) ? SpaceshipData::CollisionRadius : collider.Radius;
+
+			const Vector3& colliderPosition = mRegistry.get<PositionComponent>(collider.Entity).Position;
+			const Vector3 dp = findVectorGap(positionComponent.Position, colliderPosition);
+
+			const Vector3& colliderVelocity = mRegistry.get<VelocityComponent>(collider.Entity).Velocity;
+			const Vector3 dv = Vector3Subtract(velocityComponent.Velocity, colliderVelocity);
+
+			//Quadratic terms:
+			const float a = Vector3LengthSqr(dv);
+			const float b = 2.f * Vector3DotProduct(dp, dv);
+			const float c = Vector3LengthSqr(dp) - (radius * radius);
+
+			const float determinant = b * b - (4.f * a * c);
+			if (determinant < 0.f) {
+				return false;
+			}
+
+			const float sqrtDeterminant = sqrt(determinant);
+
+			const float contactTime = -0.5f * (b + sqrtDeterminant) / a;
+
+			if (contactTime > 0.f || contactTime < -deltaTime) {
+				return false;
+			}
+
+			const Vector3 relativeContactPosition = Vector3Add(dp, Vector3Scale(dv, contactTime));
+
+			ParticleCollisionComponent& particleCollision = mRegistry.get_or_emplace<ParticleCollisionComponent>(bullet);
+			particleCollision.ImpactNormal = Vector3Normalize(relativeContactPosition);
+			particleCollision.NormalContactSpeed = abs(Vector3DotProduct(dv, particleCollision.ImpactNormal));
+			particleCollision.Collider = collider.Entity;
+
+			return true;
+		};
+
+		const Vector2 flatPosition = { positionComponent.Position.x, positionComponent.Position.z };
+		mSpatialPartition.IterateNearby(flatPosition, flatPosition, bulletCollisionHandler);
+	};
+	bulletCollisionView.each(bulletCollisionProcess);
 
 	auto bulletPostCollisionView = mRegistry.view<ParticleCollisionComponent, BulletComponent, VelocityComponent>();
 	auto bulletPostCollisionProcess = [&](entt::entity bullet, ParticleCollisionComponent& collision, VelocityComponent& velocityComponent) {
@@ -567,6 +581,36 @@ void Simulation::Simulate() {
 	hitSpaceshipView.each(hitSpaceshipProcess);
 
 	mRegistry.clear<BulletHitComponent>();
+
+	auto shootView = mRegistry.view<PositionComponent, VelocityComponent, OrientationComponent, SpaceshipInputComponent, GunComponent>();
+	auto shootProcess = [this](const PositionComponent& positionComponent,
+		const VelocityComponent& velocityComponent,
+		const OrientationComponent& orientationComponent,
+		const SpaceshipInputComponent& inputComponent,
+		GunComponent& gunComponent) {
+			gunComponent.TimeSinceLastShot += deltaTime;
+			if (!inputComponent.Input.Fire) {
+				return;
+			}
+			if (gunComponent.TimeSinceLastShot < WeaponData::RateOfFire) {
+				return;
+			}
+			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
+			Vector3 offset = Vector3RotateByQuaternion(WeaponData::ShootBones[gunComponent.NextShotBone], orientationComponent.Quaternion);
+			Vector3 shotPosition = Vector3Add(positionComponent.Position, offset);
+			Vector3 shotVelocity = Vector3Add(velocityComponent.Velocity, Vector3Scale(forward, WeaponData::BulletSpeed));
+			entt::entity bullet = mRegistry.create();
+			mRegistry.emplace<BulletComponent>(bullet);
+			mRegistry.emplace<PositionComponent>(bullet, shotPosition);
+			mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Quaternion);
+			mRegistry.emplace<VelocityComponent>(bullet, shotVelocity);
+			mRegistry.emplace<ParticleComponent>(bullet, WeaponData::BulletLifetime);
+			gunComponent.NextShotBone += 1;
+			gunComponent.NextShotBone %= WeaponData::ShootBones.size();
+			gunComponent.TimeSinceLastShot = 0.f;
+
+	};
+	shootView.each(shootProcess);
 
 	mFrame++;
 	GameTime = deltaTime * mFrame;
