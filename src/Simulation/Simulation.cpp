@@ -482,7 +482,7 @@ void Simulation::Simulate() {
 			const Vector3 dp = findVectorGap(positionComponent.Position, colliderPosition);
 
 			const Vector3& colliderVelocity = mRegistry.get<VelocityComponent>(collider.Entity).Velocity;
-			const Vector3 dv = Vector3Subtract(velocityComponent.Velocity, colliderVelocity);
+			const Vector3 dv = Vector3Subtract(colliderVelocity, velocityComponent.Velocity);
 
 			//Quadratic terms:
 			const float a = Vector3LengthSqr(dv);
