@@ -49,7 +49,7 @@ struct ParticleDragComponent {};
 
 struct DestroyComponent {};
 
-struct HitAsteroidComponent {
+struct BulletHitComponent {
 	float HitCos;
 };
 
@@ -60,7 +60,7 @@ struct RespawnComponent {
 
 struct ParticleCollisionComponent {
 	Vector3 ImpactNormal;
-	float ContactSpeed;
+	float NormalContactSpeed;
 	entt::entity Collider;
 };
 

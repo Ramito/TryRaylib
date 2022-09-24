@@ -26,14 +26,14 @@ namespace GameData {
 }
 
 namespace SpaceData {
-	constexpr uint32_t AsteroidsCount = 200;
-	constexpr float MinAsteroidRadius = 1.5f;
-	constexpr float MaxAsteroidRadius = 6.0f;
-	constexpr float AsteroidDriftSpeed = 1.75f;
-	constexpr float LengthX = 320.f;
-	constexpr float LengthZ = 320.f;
-	constexpr int CellCountX = 32;
-	constexpr int CellCountZ = 32;
+	constexpr uint32_t AsteroidsCount = 125;
+	constexpr float MinAsteroidRadius = 1.0f;
+	constexpr float MaxAsteroidRadius = 5.0f;
+	constexpr float AsteroidDriftSpeed = 1.25f;
+	constexpr float LengthX = 250.f;
+	constexpr float LengthZ = 250.f;
+	constexpr int CellCountX = 25;
+	constexpr int CellCountZ = 25;
 }
 
 namespace SpaceshipData {
@@ -58,8 +58,8 @@ namespace SpaceshipData {
 
 namespace WeaponData {
 	constexpr float RateOfFire = 0.1f;
-	constexpr float BulletSpeed = 72.5f;
-	constexpr float BulletLifetime = 1.2f;
+	constexpr float BulletSpeed = 70.5f;
+	constexpr float BulletLifetime = 0.5f;
 	constexpr std::array<Vector3, 4> ShootBones = { Vector3 { 0.6f, 0.25f, 0.f }, Vector3 { -0.6f, 0.25f, 0.f }, Vector3 { 0.6f, -0.25f, 0.f }, Vector3 { -0.6f, -0.25f, 0.f } };
 }
 

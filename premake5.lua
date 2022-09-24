@@ -9,6 +9,7 @@ local SRC_DIR = "src"
 local LIB_DIR = "lib"
 local ENTT_DIR = path.join(LIB_DIR, "entt")
 local RAYLIB_DIR = path.join(LIB_DIR, "raylib")
+local RAYGUI_DIR = path.join(LIB_DIR, "raygui")
 
 solution "RayTest"
 	location(BUILD_DIR)
@@ -38,6 +39,8 @@ project "Game"
 	files {
 		"src/**.cpp",
 		"src/**.h",
+		RAYGUI_DIR .. "/src/**.h",
+		RAYGUI_DIR .. "/src/**.c"
 	}
 
 	includedirs
@@ -46,6 +49,8 @@ project "Game"
 	}
 
 	includedirs {ENTT_DIR .. "/src"}
+	includedirs {RAYGUI_DIR .. "/src"}
+	defines("RAYGUI_IMPLEMENTATION")
 
     links {"raylib"}
 	includedirs {RAYLIB_DIR .. "/src", RAYLIB_DIR .. "/src/external/glfw/include" }
