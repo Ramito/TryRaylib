@@ -51,12 +51,25 @@ void Menu::DrawMenu() {
 	float buttonWidth = width / 3;
 	float buttonHeight = height / 5;
 
-	Rectangle text = { 0, 0, width, height / 2 };
+	Rectangle text = { 0, height / 8, width, height / 4 };
 	GuiSetStyle(DEFAULT, TEXT_SPACING, 10);
+
 	GuiSetStyle(DEFAULT, TEXT_SIZE, 200);
 	Color textColor = GOLD;
 	textColor.a = mAlpha * 255;
-	GuiDrawText("BLAST N\' THRUST", text, TEXT_ALIGN_CENTER, textColor);
+	GuiDrawText("ACES", text, TEXT_ALIGN_CENTER, textColor);
+
+	GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
+	textColor = WHITE;
+	textColor.a = mAlpha * 255;
+	text.y += height / 16;
+	GuiDrawText("ON THE", text, TEXT_ALIGN_CENTER, textColor);
+
+	GuiSetStyle(DEFAULT, TEXT_SIZE, 150);
+	textColor = GOLD;
+	textColor.a = mAlpha * 255;
+	text.y += height / 16;
+	GuiDrawText("FIELD", text, TEXT_ALIGN_CENTER, textColor);
 
 	Rectangle button = { (width - buttonWidth) * 0.5f, height * 0.5f, buttonWidth, buttonHeight };
 

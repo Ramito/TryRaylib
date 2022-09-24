@@ -26,7 +26,7 @@ namespace GameData {
 }
 
 namespace SpaceData {
-	constexpr uint32_t AsteroidsCount = 25;
+	constexpr uint32_t AsteroidsCount = 125;
 	constexpr float MinAsteroidRadius = 1.0f;
 	constexpr float MaxAsteroidRadius = 5.0f;
 	constexpr float AsteroidDriftSpeed = 1.25f;
