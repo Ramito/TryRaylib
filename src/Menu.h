@@ -8,11 +8,11 @@ public:
 	void DrawMenu();
 
 private:
-	struct GamepadState {
+	struct SelectionState {
 		bool Active;
 		int Selection = 0;
 	};
-	GamepadState mPadState;
+	SelectionState mSelectionState;
 
 	bool mMenuActive = true;
 	bool mP1Button = false;
