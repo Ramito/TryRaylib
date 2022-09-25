@@ -15,6 +15,7 @@ public:
 
 	void Init(uint32_t players);
 	void Tick();
+	void WriteRenderState(entt::registry& target) const;
 
 	float GameTime;
 

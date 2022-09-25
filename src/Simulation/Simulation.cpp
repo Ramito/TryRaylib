@@ -91,6 +91,38 @@ void Simulation::DestroySpaceship(entt::entity spaceship, const Vector3 position
 	MakeExplosion(position, velocity, ExplosionData::SpaceshipRadius);
 }
 
+template<typename TComponent>
+static void CopyStorage(const entt::registry& source, entt::registry& target) {
+	auto view = source.view<TComponent>();
+	if constexpr (std::is_empty<TComponent>()) {
+		for (auto entity : view) {
+			target.emplace<TComponent>(entity);
+		}
+	}
+	else {
+		auto process = [&](auto entity, const auto& component)
+		{
+			target.emplace<TComponent>(entity, component);
+		};
+		view.each(process);
+	}
+}
+
+void Simulation::WriteRenderState(entt::registry& target) const
+{
+	target.clear();
+	target.reserve(mRegistry.size());
+	target.assign(mRegistry.data(), mRegistry.data() + mRegistry.size(), mRegistry.released());
+
+	CopyStorage<PositionComponent>(mRegistry, target);
+	CopyStorage<OrientationComponent>(mRegistry, target);
+	CopyStorage<ExplosionComponent>(mRegistry, target);
+	CopyStorage<BulletComponent>(mRegistry, target);
+	CopyStorage<ParticleComponent>(mRegistry, target);
+	CopyStorage<SpaceshipInputComponent>(mRegistry, target);
+	CopyStorage<AsteroidComponent>(mRegistry, target);
+}
+
 void Simulation::Simulate() {
 	constexpr float deltaTime = SimTimeData::DeltaTime;
 

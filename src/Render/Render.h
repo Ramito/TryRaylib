@@ -15,11 +15,10 @@ class Render {
 public:
 	Render(uint32_t views, RenderDependencies& dependencies);
 	~Render();
-	void DrawScreenTexture(float gameTime);
+	void DrawScreenTexture(float gameTime, entt::registry& registry);
 	const Texture& ScreenTexture() const;
 private:
 	uint32_t mViews;
-	entt::registry& mRegistry;
 	std::array<Camera, 4>& mCameras;
 	std::array<Rectangle, 4>& mViewPorts;
 	std::array<RenderTexture, 4> mBackgroundTextures;

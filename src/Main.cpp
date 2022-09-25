@@ -8,6 +8,9 @@
 #include "Simulation/Simulation.h"
 #include "Render/Render.h"
 #include "Menu.h"
+#include <mutex>
+#include <stack>
+#include <queue>
 
 static void SetupWindow() {
 	SetTargetFPS(SimTimeData::TargetFPS);
@@ -73,6 +76,16 @@ static void SetViewports(size_t count, ViewPorts& viewPorts) {
 	viewPorts[1] = { (float)GetScreenWidth() / count, 0, (float)GetScreenWidth() / count, (float)GetScreenHeight() };
 }
 
+static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras) {
+	for (auto playerEntity : registry.view<PositionComponent, SpaceshipInputComponent>()) {
+		auto& input = registry.get<SpaceshipInputComponent>(playerEntity);
+		auto& position = registry.get<PositionComponent>(playerEntity);
+		const Vector3 target = Vector3Add(position.Position, CameraData::TargetOffset);
+		gameCameras[input.InputId].target = target;
+		gameCameras[input.InputId].position = Vector3Add(target, CameraData::CameraOffset);
+	}
+}
+
 void main() {
 	SetupWindow();
 	auto gameInput = std::make_shared<std::array<GameInput, 4>>();
@@ -82,59 +95,95 @@ void main() {
 	SetViewports(1, *viewPorts);
 
 	SimDependencies simDependencies;
-	entt::registry& simRegistrry = simDependencies.CreateDependency<entt::registry>();
+	entt::registry& simRegistry = simDependencies.CreateDependency<entt::registry>();
 	simDependencies.AddDependency(gameInput);	// This should be owned elsewhere
 
 	std::unique_ptr<Simulation> sim = std::make_unique<Simulation>(simDependencies);
 	sim->Init(0);
 
 	RenderDependencies renderDependencies;
-	simDependencies.ShareDependencyWith<entt::registry>(renderDependencies);
 	renderDependencies.AddDependency(gameCameras);
 	renderDependencies.AddDependency(viewPorts);
 
 
 	std::unique_ptr<Render> render = std::make_unique<Render>(1, renderDependencies);
 
-	double gameStartTime = GetTime();
-	uint32_t simTicks = 0;
-	uint32_t ticksPerPass = 1;
+	Menu menu;
+
+	std::mutex transferMutex;
+	std::array<entt::registry, 2> simSnapShots;
+	std::stack<uint32_t> writeReadySnapshots;
+	std::queue<uint32_t> renderReadySnapshots;
+
+	uint32_t renderSnapshot = 1;
+	writeReadySnapshots.push(0);
+
+	auto simThreadProcess = [&](std::stop_token sToken) {
+		double gameStartTime = GetTime();
+		uint32_t simTicks = 0;
+		while (!sToken.stop_requested()) {
+			UpdateInput(*gameCameras, *gameInput);
+			sim->Tick();
+			simTicks += 1;
+
+			uint32_t snapshot = simSnapShots.size();
+			if (!writeReadySnapshots.empty()) {
+				std::scoped_lock lock(transferMutex);
+				snapshot = writeReadySnapshots.top();
+				writeReadySnapshots.pop();
+			}
+
+			if (snapshot < simSnapShots.size()) {
+				sim->WriteRenderState(simSnapShots[snapshot]);
+				{
+					std::scoped_lock lock(transferMutex);
+					renderReadySnapshots.push(snapshot);
+				}
+			}
+
+			double gameTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
+			if (auto waitTime = gameTime - GetTime(); waitTime > 0.0) {
+				std::chrono::duration<double> sleepDuration(waitTime);
+				std::this_thread::sleep_for(sleepDuration);
+			}
+		}
+	};
+
+	std::unique_ptr<std::jthread> simThread = std::make_unique<std::jthread>(simThreadProcess);
 
 	auto startGameAction = [&](uint32_t players) {
+		simThread.reset();
+
 		sim = std::make_unique<Simulation>(simDependencies);
 		sim->Init(players);
 		SetViewports(players, *viewPorts);
 		render = std::make_unique<Render>(players, renderDependencies);
+
+		simThread = std::make_unique<std::jthread>(simThreadProcess);
 	};
-	Menu menu;
 
 	while (!WindowShouldClose()) {
 		menu.UpdateMenu(startGameAction);
-
-		double currentGameTime = GetTime();
-		double lastSimTickTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
-		if (currentGameTime <= lastSimTickTime) {
-			if (ticksPerPass > 1) {
-				ticksPerPass -= 1;
+		if (!renderReadySnapshots.empty()) {
+			{
+				std::scoped_lock lock(transferMutex);
+				writeReadySnapshots.push(renderSnapshot);
+				renderSnapshot = renderReadySnapshots.front();
+				renderReadySnapshots.pop();
 			}
-			continue;
+			// This runs concurrently to sim frame... issue?
+			UpdateCameras(simRegistry, *gameCameras);
+			render->DrawScreenTexture(sim->GameTime, simSnapShots[renderSnapshot]);
 		}
-		UpdateInput(*gameCameras, *gameInput);
-		uint32_t counter = ticksPerPass;
-		while (counter-- > 0) {
-			sim->Tick();
-		}
-		simTicks += ticksPerPass;
-		lastSimTickTime += SimTimeData::DeltaTime * ticksPerPass;
-		if (lastSimTickTime < currentGameTime) {
-			ticksPerPass += 1;
-		}
-		render->DrawScreenTexture(sim->GameTime);
+
 
 		BeginDrawing();
 		DrawTextureRec(render->ScreenTexture(), { 0.f, 0.f, (float)GetScreenWidth(), -(float)GetScreenHeight() }, {}, WHITE);
 		menu.DrawMenu();
 		EndDrawing();
 	}
+
+	simThread.reset();
+
 	CloseWindow();
 }

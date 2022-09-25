@@ -25,6 +25,11 @@ namespace GameData {
 	constexpr float RespawnTimer = 2.f;
 }
 
+namespace CameraData {
+	constexpr Vector3 TargetOffset = { -3.5f, 0.f, -3.5f };
+	constexpr Vector3 CameraOffset = { -11.f, 42.f, -11.f };
+}
+
 namespace SpaceData {
 	constexpr uint32_t AsteroidsCount = 125;
 	constexpr float MinAsteroidRadius = 1.0f;

@@ -7,17 +7,11 @@
 #include <rlgl.h>
 #include <optional>
 
-constexpr Vector3 TargetOffset = { -3.5f, 0.f, -3.5f };
-constexpr Vector3 CameraOffset = { -11.f, 42.f, -11.f };
-
 Render::Render(uint32_t views, RenderDependencies& dependencies) : mViews(views)
-, mRegistry(dependencies.GetDependency<entt::registry>())
 , mCameras(dependencies.GetDependency<GameCameras>())
 , mViewPorts(dependencies.GetDependency<ViewPorts>())
 {
 	for (Camera& camera : mCameras) {
-		camera.target = TargetOffset;
-		camera.position = CameraOffset;
 		camera.projection = CAMERA_PERSPECTIVE;
 		camera.up = { 0.f, 1.f, 0.f };
 		camera.fovy = 60.f;
@@ -210,7 +204,7 @@ namespace {
 			targetZ -= SpaceData::LengthZ;
 		}
 		backgroundCamera.target = { targetX, 0.f, targetZ };
-		backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraOffset, 1.75f));
+		backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraData::CameraOffset, 1.75f));
 
 		BeginTextureMode(bulletTexture);
 		ClearBackground(BLANK);
@@ -249,17 +243,9 @@ namespace {
 	}
 }
 
-void Render::DrawScreenTexture(float gameTime) {
-	for (auto playerEntity : mRegistry.view<PositionComponent, SpaceshipInputComponent>()) {
-		auto& input = mRegistry.get<SpaceshipInputComponent>(playerEntity);
-		auto& position = mRegistry.get<PositionComponent>(playerEntity);
-		const Vector3 target = Vector3Add(position.Position, TargetOffset);
-		mCameras[input.InputId].target = target;
-		mCameras[input.InputId].position = Vector3Add(target, CameraOffset);
-	}
-
+void Render::DrawScreenTexture(float gameTime, entt::registry& registry) {
 	for (size_t i = 0; i < mViews; ++i) {
-		RenderView(mCameras[i], mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i], mRegistry, gameTime);
+		RenderView(mCameras[i], mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i], registry, gameTime);
 	}
 
 	BeginTextureMode(mScreenTexture);
