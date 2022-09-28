@@ -7,86 +7,8 @@
 #include <rlgl.h>
 #include <optional>
 
-Render::Render(uint32_t views, RenderDependencies& dependencies) : mViews(views)
-, mCameras(dependencies.GetDependency<GameCameras>())
-, mViewPorts(dependencies.GetDependency<ViewPorts>())
-{
-	for (Camera& camera : mCameras) {
-		camera.projection = CAMERA_PERSPECTIVE;
-		camera.up = { 0.f, 1.f, 0.f };
-		camera.fovy = 60.f;
-		SetCameraMode(camera, CAMERA_CUSTOM);
-	}
-
-	for (size_t i = 0; i < mViewPorts.size(); ++i) {
-		int width = mViewPorts[i].width;
-		int height = mViewPorts[i].height;
-		mBackgroundTextures[i] = LoadRenderTexture(width, height);
-		mBulletTextures[i] = LoadRenderTexture(width, height);
-		mViewPortTextures[i] = LoadRenderTexture(width, height);
-	}
-
-	mScreenTexture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-}
-
-Render::~Render() {
-	for (size_t i = 0; i < mViewPorts.size(); ++i) {
-		UnloadRenderTexture(mBackgroundTextures[i]);
-		UnloadRenderTexture(mBulletTextures[i]);
-		UnloadRenderTexture(mViewPortTextures[i]);
-	}
-	UnloadRenderTexture(mScreenTexture);
-}
-
-static void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
-	constexpr float Angle = -2.f * PI / 3.f;
-	constexpr float Length = 1.25f;
-	constexpr float Width = 0.65f;
-	constexpr float Height = 0.25f;
-
-	Vector3 forward = Vector3RotateByQuaternion(Forward3, orientation);
-	Vector3 left = Vector3RotateByQuaternion(Left3, orientation);
-	Vector3 up = Vector3RotateByQuaternion(Up3, orientation);
-
-	Vector3 upShift = Vector3Scale(up, Height);
-	Vector3 downShift = Vector3Scale(up, -2.f * Height);
-
-	Quaternion triangleQuat = QuaternionFromAxisAngle(up, Angle);
-
-	Vector3 vertex1 = Vector3Add(Vector3Scale(forward, Length), position);
-
-	Vector3 relVertex = Vector3RotateByQuaternion(forward, triangleQuat);
-	Vector3 vertex2 = Vector3Add(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
-
-	relVertex = Vector3RotateByQuaternion(relVertex, triangleQuat);
-	Vector3 vertex3 = Vector3Subtract(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
-
-	DrawLine3D(vertex1, vertex2, RED);
-	DrawLine3D(vertex2, vertex3, RED);
-	DrawLine3D(vertex3, vertex1, RED);
-	vertex2 = Vector3Add(vertex2, downShift);
-	vertex3 = Vector3Subtract(vertex3, downShift);
-
-	DrawLine3D(vertex1, vertex2, RED);
-	DrawLine3D(vertex2, vertex3, RED);
-	DrawLine3D(vertex3, vertex1, RED);
-
-	Vector3 midBack = Vector3Lerp(vertex2, vertex3, 0.5f);
-	DrawLine3D(vertex1, midBack, RED);
-}
 
 namespace {
-	struct CameraFrustum {
-		Vector3 Target;
-		float TopSupport;
-		Vector3 TopNormal;
-		float LeftSupport;
-		Vector3 LeftNormal;
-		float BottomSupport;
-		Vector3 BottomNormal;
-		float RightSupport;
-		Vector3 RightNormal;
-	};
 
 	CameraFrustum ComputeFrustum(const Camera& camera, const Rectangle& viewPort) {
 
@@ -134,66 +56,79 @@ namespace {
 		return {};
 	}
 
-	void DrawToCurrentTarget(const Camera& camera, const Rectangle& viewPort, const entt::registry& registry) {
-		const CameraFrustum frustum = ComputeFrustum(camera, viewPort);
+	void DrawSpaceShip(const Vector3& position, const Quaternion orientation) {
+		constexpr float Angle = -2.f * PI / 3.f;
+		constexpr float Length = 1.25f;
+		constexpr float Width = 0.65f;
+		constexpr float Height = 0.25f;
 
-		for (auto entity : registry.view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
-			auto& position = registry.get<PositionComponent>(entity);
-			auto& orientation = registry.get<OrientationComponent>(entity);
-			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position.Position, SpaceshipData::CollisionRadius)) {
-				DrawSpaceShip(renderPosition.value(), orientation.Quaternion);
-			}
+		Vector3 forward = Vector3RotateByQuaternion(Forward3, orientation);
+		Vector3 left = Vector3RotateByQuaternion(Left3, orientation);
+		Vector3 up = Vector3RotateByQuaternion(Up3, orientation);
+
+		Vector3 upShift = Vector3Scale(up, Height);
+		Vector3 downShift = Vector3Scale(up, -2.f * Height);
+
+		Quaternion triangleQuat = QuaternionFromAxisAngle(up, Angle);
+
+		Vector3 vertex1 = Vector3Add(Vector3Scale(forward, Length), position);
+
+		Vector3 relVertex = Vector3RotateByQuaternion(forward, triangleQuat);
+		Vector3 vertex2 = Vector3Add(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
+
+		relVertex = Vector3RotateByQuaternion(relVertex, triangleQuat);
+		Vector3 vertex3 = Vector3Subtract(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
+
+		DrawLine3D(vertex1, vertex2, RED);
+		DrawLine3D(vertex2, vertex3, RED);
+		DrawLine3D(vertex3, vertex1, RED);
+		vertex2 = Vector3Add(vertex2, downShift);
+		vertex3 = Vector3Subtract(vertex3, downShift);
+
+		DrawLine3D(vertex1, vertex2, RED);
+		DrawLine3D(vertex2, vertex3, RED);
+		DrawLine3D(vertex3, vertex1, RED);
+
+		Vector3 midBack = Vector3Lerp(vertex2, vertex3, 0.5f);
+		DrawLine3D(vertex1, midBack, RED);
+	}
+
+	void DrawToCurrentTarget(const RenderList& list) {
+		for (const auto& [position, orientation] : list.Spaceships) {
+			DrawSpaceShip(position, orientation);
 		}
 
-		for (auto asteroid : registry.view<AsteroidComponent>()) {
-			const float radius = registry.get<AsteroidComponent>(asteroid).Radius;
-			const Vector3 position = registry.get<PositionComponent>(asteroid).Position;
-			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, radius)) {
-				DrawSphereWires(renderPosition.value(), radius, 8, 8, RAYWHITE);
-			}
+		for (const auto& [position, radius] : list.Asteroids) {
+			DrawSphereWires(position, radius, 8, 8, RAYWHITE);
 		}
 
-		for (entt::entity particle : registry.view<ParticleComponent>(entt::exclude<BulletComponent>)) {
-			const Vector3 position = registry.get<PositionComponent>(particle).Position;
-			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, 0.f)) {
-				DrawPoint3D(renderPosition.value(), ORANGE);
-			}
+		for (const auto& position : list.Particles) {
+			DrawPoint3D(position, ORANGE);
 		}
 	}
 
-	void DrawBulletsToCurrentTarget(const Camera& camera, const Rectangle& viewPort, const entt::registry& registry, float gameTime) {
-		const CameraFrustum frustum = ComputeFrustum(camera, viewPort);
-
+	void DrawBulletsToCurrentTarget(const RenderList& list) {
 		BeginBlendMode(BLEND_ALPHA);
 		rlDisableDepthMask();
 
-		for (entt::entity particle : registry.view<BulletComponent>()) {
-			const Vector3 position = registry.get<PositionComponent>(particle).Position;
-			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, 0.f)) {
-				// Ghetto bloom
-				DrawSphere(renderPosition.value(), 0.05f, WHITE);
-				DrawSphere(renderPosition.value(), 0.12f, GREEN);
-				DrawSphere(renderPosition.value(), 0.175f, { 0, 228, 48, 180 });
-				DrawSphere(renderPosition.value(), 1.f, { 0, 228, 48, 80 });
-			}
+		for (const Vector3& bullet : list.Bullets) {
+			// Ghetto bloom
+			DrawSphere(bullet, 0.05f, WHITE);
+			DrawSphere(bullet, 0.12f, GREEN);
+			DrawSphere(bullet, 0.175f, { 0, 228, 48, 180 });
+			DrawSphere(bullet, 1.f, { 0, 228, 48, 80 });
 		}
 
-		for (auto explosion : registry.view<ExplosionComponent>()) {
-			const Vector3& position = registry.get<PositionComponent>(explosion).Position;
-			const ExplosionComponent& explosionComponent = registry.get<ExplosionComponent>(explosion);
-			const float relativeTime = std::clamp((gameTime - explosionComponent.StartTime) / ExplosionData::Time, 0.f, 1.f);
-			const float radiusModule = std::cbrt(relativeTime);
-			const float radius = radiusModule * explosionComponent.Radius;
-			Color color = { 255, 255, 255, (1.f - relativeTime) * 255 };
-			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, radius)) {
-				DrawSphere(renderPosition.value(), explosionComponent.Radius * radiusModule, color);
-			}
+		for (const auto& [position, radius] : list.Explosions) {
+			// WIPW IP WIP DONT FORGET ALPHA RELATIVE TO RADIUS
+			Color color = { 255, 255, 255, (1.f) * 255 };
+			DrawSphere(position, radius, color);
 		}
 
 		rlEnableDepthMask();
 	}
 
-	void RenderView(const Camera& camera, const Rectangle& viewPort, RenderTexture& viewTexture, RenderTexture& backgroundTexture, RenderTexture& bulletTexture, entt::registry& registry, float gameTime) {
+	Camera MakeBackgroundCamera(const Camera& camera) {
 		Camera backgroundCamera = camera;
 		float targetX = camera.target.x + SpaceData::LengthX * 0.5f;
 		float targetZ = camera.target.z + SpaceData::LengthZ * 0.5f;
@@ -205,25 +140,28 @@ namespace {
 		}
 		backgroundCamera.target = { targetX, 0.f, targetZ };
 		backgroundCamera.position = Vector3Add(backgroundCamera.target, Vector3Scale(CameraData::CameraOffset, 1.75f));
+		return backgroundCamera;
+	}
 
+	void RenderView(const Camera& camera, const Rectangle& viewPort, RenderTexture& viewTexture, RenderTexture& backgroundTexture, RenderTexture& bulletTexture, const RenderPayload& payload) {
 		BeginTextureMode(bulletTexture);
 		ClearBackground(BLANK);
-		BeginMode3D(backgroundCamera);
-		DrawBulletsToCurrentTarget(backgroundCamera, viewPort, registry, gameTime);
+		BeginMode3D(payload.BackgroundCamera);
+		DrawBulletsToCurrentTarget(payload.BackgroundList);
 		EndBlendMode();
 		EndMode3D();
 		EndTextureMode();
 
 		BeginTextureMode(backgroundTexture);
 		ClearBackground(BLANK);
-		BeginMode3D(backgroundCamera);
-		DrawToCurrentTarget(backgroundCamera, viewPort, registry);
+		BeginMode3D(payload.BackgroundCamera);
+		DrawToCurrentTarget(payload.BackgroundList);
 		EndMode3D();
 		EndTextureMode();
 
 		BeginTextureMode(bulletTexture);
-		BeginMode3D(camera);
-		DrawBulletsToCurrentTarget(camera, viewPort, registry, gameTime);
+		BeginMode3D(payload.MainCamera);
+		DrawBulletsToCurrentTarget(payload.MainList);
 		EndBlendMode();
 		EndMode3D();
 		EndTextureMode();
@@ -233,8 +171,8 @@ namespace {
 		BeginTextureMode(viewTexture);
 		ClearBackground({ 0, 41, 96, 255 });
 		DrawTextureRec(backgroundTexture.texture, target, Vector2Zero(), GRAY);
-		BeginMode3D(camera);
-		DrawToCurrentTarget(camera, viewPort, registry);
+		BeginMode3D(payload.MainCamera);
+		DrawToCurrentTarget(payload.MainList);
 		EndMode3D();
 		BeginBlendMode(BLEND_ADDITIVE);
 		DrawTextureRec(bulletTexture.texture, target, Vector2Zero(), WHITE);
@@ -243,9 +181,112 @@ namespace {
 	}
 }
 
-void Render::DrawScreenTexture(float gameTime, entt::registry& registry) {
+Render::Render(uint32_t views, RenderDependencies& dependencies) : mViews(views)
+, mCameras(dependencies.GetDependency<GameCameras>())
+, mViewPorts(dependencies.GetDependency<ViewPorts>())
+, mThreadPool(2)
+{
+	for (Camera& camera : mCameras) {
+		camera.projection = CAMERA_PERSPECTIVE;
+		camera.up = { 0.f, 1.f, 0.f };
+		camera.fovy = 60.f;
+		camera.target = {};
+		camera.position = CameraData::CameraOffset;
+		SetCameraMode(camera, CAMERA_CUSTOM);
+	}
+
+	for (size_t i = 0; i < mViewPorts.size(); ++i) {
+		int width = mViewPorts[i].width;
+		int height = mViewPorts[i].height;
+		mBackgroundTextures[i] = LoadRenderTexture(width, height);
+		mBulletTextures[i] = LoadRenderTexture(width, height);
+		mViewPortTextures[i] = LoadRenderTexture(width, height);
+	}
+
+	mScreenTexture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+}
+
+Render::~Render() {
+	for (size_t i = 0; i < mViewPorts.size(); ++i) {
+		UnloadRenderTexture(mBackgroundTextures[i]);
+		UnloadRenderTexture(mBulletTextures[i]);
+		UnloadRenderTexture(mViewPortTextures[i]);
+	}
+	UnloadRenderTexture(mScreenTexture);
+}
+
+void Render::DrawScreenTexture(float gameTime, const entt::registry& registry) {
 	for (size_t i = 0; i < mViews; ++i) {
-		RenderView(mCameras[i], mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i], registry, gameTime);
+		RenderTaskSource& source = mRenderTaskSources[i];
+		source.SimFrame = &registry;
+		source.MainCamera = mCameras[i];
+		source.Viewport = mViewPorts[i];
+	}
+
+	for (size_t i = 0; i < 2 * mViews; ++i) {
+		RenderTaskInput& input = mRenderTaskInputs[i];
+		const Camera& mainCamera = mCameras[i / 2];
+		if (i % 2 == 0) {
+			input.Camera = mainCamera;
+		}
+		else {
+			input.Camera = MakeBackgroundCamera(mainCamera);
+		}
+		input.Frustum = ComputeFrustum(input.Camera, mRenderTaskSources[i / 2].Viewport);
+	}
+
+	auto clearRenderList = [](RenderList& list) {
+		list.Spaceships.clear();
+		list.Asteroids.clear();
+		list.Particles.clear();
+		list.Bullets.clear();
+		list.Explosions.clear();
+		list.BakeProgress = 0;
+	};
+
+	for (size_t i = 0; i < mViews; ++i) {
+		RenderPayload& payload = mRenderPayloads[i];
+		payload.MainCamera = mRenderTaskInputs[2 * i].Camera;
+		clearRenderList(payload.MainList);
+		payload.BackgroundCamera = mRenderTaskInputs[2 * i + 1].Camera;
+		clearRenderList(payload.BackgroundList);
+	}
+
+	if (mRenderTasks.empty()) {
+		auto makeMainTask = [this](size_t i, auto&& baker) {
+			return [&, i]() {
+				baker(mRenderTaskSources[i], mRenderTaskInputs[2 * i], mRenderPayloads[i].MainList);
+			};
+		};
+
+		auto makeBackgroundTask = [this](size_t i, auto&& baker) {
+			return [&, i]() {
+				baker(mRenderTaskSources[i], mRenderTaskInputs[2 * i + 1], mRenderPayloads[i].BackgroundList);
+			};
+		};
+
+		for (size_t i = 0; i < mViews; ++i) {
+			mRenderTasks.push_back(makeMainTask(i, BakeSpaceshipsRenderList));
+			mRenderTasks.push_back(makeMainTask(i, BakeAsteroidsRenderList));
+			mRenderTasks.push_back(makeMainTask(i, BakeParticlesRenderList));
+			mRenderTasks.push_back(makeMainTask(i, BakeBulletsRenderList));
+			mRenderTasks.push_back(makeMainTask(i, BakeExplosionsRenderList));
+
+			mRenderTasks.push_back(makeBackgroundTask(i, BakeSpaceshipsRenderList));
+			mRenderTasks.push_back(makeBackgroundTask(i, BakeAsteroidsRenderList));
+			mRenderTasks.push_back(makeBackgroundTask(i, BakeParticlesRenderList));
+			mRenderTasks.push_back(makeBackgroundTask(i, BakeBulletsRenderList));
+			mRenderTasks.push_back(makeBackgroundTask(i, BakeExplosionsRenderList));
+		}
+	}
+
+	mThreadPool.PushTasks(mRenderTasks.begin(), mRenderTasks.end());
+	for (size_t i = 0; i < mViews; ++i) {
+		while (mRenderPayloads[i].MainList.BakeProgress < RenderList::MaxBakeProgress
+			|| mRenderPayloads[i].BackgroundList.BakeProgress < RenderList::MaxBakeProgress) {
+			mThreadPool.TryHelpOneTask();
+		}
+		RenderView(mCameras[i], mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i], mRenderPayloads[i]);
 	}
 
 	BeginTextureMode(mScreenTexture);
@@ -263,5 +304,66 @@ void Render::DrawScreenTexture(float gameTime, entt::registry& registry) {
 
 const Texture& Render::ScreenTexture() const {
 	return mScreenTexture.texture;
+}
+
+void Render::BakeSpaceshipsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList) {
+	targetList.Spaceships.clear();
+	for (auto entity : source.SimFrame->view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
+		auto& position = source.SimFrame->get<PositionComponent>(entity).Position;
+		if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, SpaceshipData::CollisionRadius)) {
+			auto& orientation = source.SimFrame->get<OrientationComponent>(entity).Quaternion;
+			targetList.Spaceships.emplace_back(renderPosition.value(), orientation);
+		}
+	}
+	targetList.BakeProgress += 1;
+}
+
+void Render::BakeAsteroidsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList) {
+	targetList.Asteroids.clear();
+	for (auto asteroid : source.SimFrame->view<AsteroidComponent>()) {
+		const float radius = source.SimFrame->get<AsteroidComponent>(asteroid).Radius;
+		const Vector3 position = source.SimFrame->get<PositionComponent>(asteroid).Position;
+		if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, radius)) {
+			targetList.Asteroids.emplace_back(renderPosition.value(), radius);
+		}
+	}
+	targetList.BakeProgress += 1;
+}
+
+void Render::BakeParticlesRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList) {
+	targetList.Particles.clear();
+	for (entt::entity particle : source.SimFrame->view<ParticleComponent>(entt::exclude<BulletComponent>)) {
+		const Vector3 position = source.SimFrame->get<PositionComponent>(particle).Position;
+		if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, 0.f)) {
+			targetList.Particles.emplace_back(renderPosition.value());
+		}
+	}
+	targetList.BakeProgress += 1;
+}
+
+void Render::BakeBulletsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList) {
+	targetList.Bullets.clear();
+	for (entt::entity particle : source.SimFrame->view<BulletComponent>()) {
+		const Vector3 position = source.SimFrame->get<PositionComponent>(particle).Position;
+		if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, 0.f)) {
+			targetList.Bullets.emplace_back(renderPosition.value());
+		}
+	}
+	targetList.BakeProgress += 1;
+}
+
+void Render::BakeExplosionsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList) {
+	targetList.Explosions.clear();
+	for (auto explosion : source.SimFrame->view<ExplosionComponent>()) {
+		const Vector3& position = source.SimFrame->get<PositionComponent>(explosion).Position;
+		const ExplosionComponent& explosionComponent = source.SimFrame->get<ExplosionComponent>(explosion);
+		const float relativeTime = 1.f; //std::clamp((mGameTime - explosionComponent.StartTime) / ExplosionData::Time, 0.f, 1.f);
+		const float radiusModule = std::cbrt(relativeTime);
+		const float radius = radiusModule * explosionComponent.Radius;
+		if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, radius)) {
+			targetList.Explosions.emplace_back(renderPosition.value(), radius);
+		}
+	}
+	targetList.BakeProgress += 1;
 }
 

@@ -3,26 +3,83 @@
 #include "DependencyContainer.h"
 
 #include "entt/entt.hpp"
+#include "ThreadPool/ThreadPool.h"
 #include <raylib.h>
 
-using GameCameras = std::array<Camera, 4>;
-using ViewPorts = std::array<Rectangle, 4>;
+static constexpr size_t MaxViews = 2;
+
+using GameCameras = std::array<Camera, MaxViews>;
+using ViewPorts = std::array<Rectangle, MaxViews>;
 
 struct RenderFlag {};
 using RenderDependencies = DependencyContainer<RenderFlag>;
+
+struct CameraFrustum {
+	Vector3 Target;
+	float TopSupport;
+	Vector3 TopNormal;
+	float LeftSupport;
+	Vector3 LeftNormal;
+	float BottomSupport;
+	Vector3 BottomNormal;
+	float RightSupport;
+	Vector3 RightNormal;
+};
+
+struct RenderTaskSource {
+	const entt::registry* SimFrame;
+	Camera MainCamera;
+	Rectangle Viewport;
+};
+
+struct RenderTaskInput {
+	Camera Camera;
+	CameraFrustum Frustum;
+};
+
+struct RenderList {
+	std::vector<std::tuple<Vector3, Quaternion>> Spaceships;
+	std::vector<std::tuple<Vector3, float>> Asteroids;
+	std::vector<Vector3> Particles;
+	std::vector<Vector3> Bullets;
+	std::vector<std::tuple<Vector3, float>> Explosions;
+	static constexpr uint32_t MaxBakeProgress = 5;
+	std::atomic<uint32_t> BakeProgress = 0;
+};
+
+struct RenderPayload {
+	Camera MainCamera;
+	RenderList MainList;
+	Camera BackgroundCamera;
+	RenderList BackgroundList;
+};
 
 class Render {
 public:
 	Render(uint32_t views, RenderDependencies& dependencies);
 	~Render();
-	void DrawScreenTexture(float gameTime, entt::registry& registry);
+	void DrawScreenTexture(float gameTime, const entt::registry& registry);
 	const Texture& ScreenTexture() const;
+
+
+	static void BakeSpaceshipsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList);
+	static void BakeAsteroidsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList);
+	static void BakeParticlesRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList);
+	static void BakeBulletsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList);
+	static void BakeExplosionsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList);
+
 private:
 	uint32_t mViews;
-	std::array<Camera, 4>& mCameras;
-	std::array<Rectangle, 4>& mViewPorts;
-	std::array<RenderTexture, 4> mBackgroundTextures;
-	std::array<RenderTexture, 4> mBulletTextures;
-	std::array<RenderTexture, 4> mViewPortTextures;
+	std::array<Camera, MaxViews>& mCameras;
+	std::array<Rectangle, MaxViews>& mViewPorts;
+	std::array<RenderTexture, MaxViews> mBackgroundTextures;
+	std::array<RenderTexture, MaxViews> mBulletTextures;
+	std::array<RenderTexture, MaxViews> mViewPortTextures;
 	RenderTexture mScreenTexture;
+
+	ThreadPool mThreadPool;
+	std::array<RenderTaskSource, MaxViews> mRenderTaskSources; // One per view port	NOTE: Can remove later, just need the sim frame!
+	std::array<RenderTaskInput, 2 * MaxViews> mRenderTaskInputs;	// Two per view port
+	std::array<RenderPayload, MaxViews> mRenderPayloads;		// One per view port
+	std::vector<Task> mRenderTasks;	// A bunch!
 };

@@ -25,7 +25,7 @@ static void SetupWindow() {
 	}
 }
 
-void UpdateInput(const std::array<Camera, 4>& cameras, std::array<GameInput, 4>& gameInputs) {
+void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInput, MaxViews>& gameInputs) {
 	for (size_t idx = 0; idx < gameInputs.size(); ++idx) {
 		GameInput& gameInput = gameInputs[idx];
 		const Camera& camera = cameras[idx];
@@ -88,7 +88,7 @@ static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras) {
 
 void main() {
 	SetupWindow();
-	auto gameInput = std::make_shared<std::array<GameInput, 4>>();
+	auto gameInput = std::make_shared<std::array<GameInput, MaxViews>>();
 	auto gameCameras = std::make_shared<GameCameras>();
 	auto viewPorts = std::make_shared<ViewPorts>();
 
@@ -165,14 +165,14 @@ void main() {
 	while (!WindowShouldClose()) {
 		menu.UpdateMenu(startGameAction);
 		if (!renderReadySnapshots.empty()) {
+			simSnapShots[renderSnapshot].clear();
 			{
 				std::scoped_lock lock(transferMutex);
 				writeReadySnapshots.push(renderSnapshot);
 				renderSnapshot = renderReadySnapshots.front();
 				renderReadySnapshots.pop();
 			}
-			// This runs concurrently to sim frame... issue?
-			UpdateCameras(simRegistry, *gameCameras);
+			UpdateCameras(simSnapShots[renderSnapshot], *gameCameras);
 			render->DrawScreenTexture(sim->GameTime, simSnapShots[renderSnapshot]);
 		}
 

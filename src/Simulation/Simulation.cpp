@@ -58,7 +58,7 @@ static Vector3 HorizontalOrthogonal(const Vector3& vector) {
 	return { -vector.z, vector.y, vector.x };
 }
 
-static void ProcessInput(entt::registry& registry, const std::array<GameInput, 4>& gameInput) {
+static void ProcessInput(entt::registry& registry, const std::array<GameInput, 2>& gameInput) {
 	for (SpaceshipInputComponent& inputComponent : registry.view<SpaceshipInputComponent>().storage()) {
 		inputComponent.Input = gameInput[inputComponent.InputId];
 	}
@@ -110,7 +110,7 @@ static void CopyStorage(const entt::registry& source, entt::registry& target) {
 
 void Simulation::WriteRenderState(entt::registry& target) const
 {
-	target.clear();
+	assert(target.empty());
 	target.reserve(mRegistry.size());
 	target.assign(mRegistry.data(), mRegistry.data() + mRegistry.size(), mRegistry.released());
 
