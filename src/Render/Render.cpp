@@ -119,9 +119,9 @@ namespace {
 			DrawSphere(bullet, 1.f, { 0, 228, 48, 80 });
 		}
 
-		for (const auto& [position, radius] : list.Explosions) {
-			// WIPW IP WIP DONT FORGET ALPHA RELATIVE TO RADIUS
-			Color color = { 255, 255, 255, (1.f) * 255 };
+		for (const auto& [position, radius, relativeRadius] : list.Explosions) {
+			float alpha = cbrt(1.f - relativeRadius);
+			Color color = { 255, 255, 255, rintf(alpha * 255) };
 			DrawSphere(position, radius, color);
 		}
 
@@ -215,7 +215,7 @@ Render::~Render() {
 	UnloadRenderTexture(mScreenTexture);
 }
 
-void Render::DrawScreenTexture(float gameTime, const entt::registry& registry) {
+void Render::DrawScreenTexture(const entt::registry& registry) {
 	for (size_t i = 0; i < mViews; ++i) {
 		RenderTaskSource& source = mRenderTaskSources[i];
 		source.SimFrame = &registry;
@@ -357,11 +357,10 @@ void Render::BakeExplosionsRenderList(const RenderTaskSource& source, const Rend
 	for (auto explosion : source.SimFrame->view<ExplosionComponent>()) {
 		const Vector3& position = source.SimFrame->get<PositionComponent>(explosion).Position;
 		const ExplosionComponent& explosionComponent = source.SimFrame->get<ExplosionComponent>(explosion);
-		const float relativeTime = 1.f; //std::clamp((mGameTime - explosionComponent.StartTime) / ExplosionData::Time, 0.f, 1.f);
-		const float radiusModule = std::cbrt(relativeTime);
-		const float radius = radiusModule * explosionComponent.Radius;
+		const float radius = explosionComponent.CurrentRadius;
+		const float relativeRadius = radius / explosionComponent.TerminalRadius;
 		if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, radius)) {
-			targetList.Explosions.emplace_back(renderPosition.value(), radius);
+			targetList.Explosions.emplace_back(renderPosition.value(), radius, std::clamp(relativeRadius, 0.f, 1.f));
 		}
 	}
 	targetList.BakeProgress += 1;

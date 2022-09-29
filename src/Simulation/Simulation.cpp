@@ -68,7 +68,7 @@ void Simulation::MakeExplosion(const Vector3& position, const Vector3& velocity,
 	auto explosion = mRegistry.create();
 	mRegistry.emplace<PositionComponent>(explosion, position);
 	mRegistry.emplace<VelocityComponent>(explosion, velocity);
-	mRegistry.emplace<ExplosionComponent>(explosion, GameTime, radius);
+	mRegistry.emplace<ExplosionComponent>(explosion, GameTime, 0.f, radius);
 	for (size_t i = 0; i < 500; ++i) {
 		auto particle = mRegistry.create();
 		std::normal_distribution normal(0.f, 1.f);
@@ -141,12 +141,13 @@ void Simulation::Simulate() {
 	}
 
 	auto explosionView = mRegistry.view<ExplosionComponent, PositionComponent>();
-	auto explosionProcess = [&](auto explosion, const ExplosionComponent& explosionComponent, const PositionComponent& positionComponent)
+	auto explosionProcess = [&](auto explosion, ExplosionComponent& explosionComponent, const PositionComponent& positionComponent)
 	{
 		const float elapsedTime = GameTime - explosionComponent.StartTime;
 		if (elapsedTime >= ExplosionData::Time) {
 			mRegistry.emplace<DestroyComponent>(explosion);
 		}
+		explosionComponent.CurrentRadius = cbrt(std::clamp(elapsedTime / ExplosionData::Time, 0.f, 1.f)) * explosionComponent.TerminalRadius;
 	};
 	explosionView.each(explosionProcess);
 
@@ -454,7 +455,7 @@ void Simulation::Simulate() {
 	// Assuming the number of simultaneous explosions is low
 	for (auto explosion : explosionView) {
 		const Vector3& explosionPosition = mRegistry.get<PositionComponent>(explosion).Position;
-		const float explosionRadius = mRegistry.get<ExplosionComponent>(explosion).Radius;
+		const float explosionRadius = mRegistry.get<ExplosionComponent>(explosion).CurrentRadius;
 		auto particleExplosionProcess = [&](entt::entity particle, const ParticleComponent&, const PositionComponent& positionComponent, VelocityComponent& velocityComponent) {
 			const Vector3& particlePosition = mRegistry.get<PositionComponent>(particle).Position;
 			const float distanceSqr = Vector3DistanceSqr(explosionPosition, particlePosition);

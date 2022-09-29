@@ -42,7 +42,7 @@ struct RenderList {
 	std::vector<std::tuple<Vector3, float>> Asteroids;
 	std::vector<Vector3> Particles;
 	std::vector<Vector3> Bullets;
-	std::vector<std::tuple<Vector3, float>> Explosions;
+	std::vector<std::tuple<Vector3, float, float>> Explosions;
 	static constexpr uint32_t MaxBakeProgress = 5;
 	std::atomic<uint32_t> BakeProgress = 0;
 };
@@ -58,7 +58,7 @@ class Render {
 public:
 	Render(uint32_t views, RenderDependencies& dependencies);
 	~Render();
-	void DrawScreenTexture(float gameTime, const entt::registry& registry);
+	void DrawScreenTexture(const entt::registry& registry);
 	const Texture& ScreenTexture() const;
 
 

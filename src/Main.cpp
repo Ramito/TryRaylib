@@ -174,7 +174,7 @@ void main() {
 				renderReadySnapshots.pop();
 			}
 			UpdateCameras(simSnapShots[renderSnapshot], *gameCameras);
-			render->DrawScreenTexture(sim->GameTime, simSnapShots[renderSnapshot]);
+			render->DrawScreenTexture(simSnapShots[renderSnapshot]);
 		}
 
 
