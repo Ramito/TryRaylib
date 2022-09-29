@@ -13,16 +13,17 @@
 #include <queue>
 
 static void SetupWindow() {
-	SetTargetFPS(SimTimeData::TargetFPS);
 	int targetWidth = 2560;
 	int targetHeight = 1440;
 	InitWindow(targetWidth, targetHeight, "Game");
 	SetConfigFlags(ConfigFlags::FLAG_WINDOW_UNDECORATED);
 
-	if (GetMonitorWidth(GetCurrentMonitor()) <= targetWidth) {
+	int currentMonitor = GetCurrentMonitor();
+	if (GetMonitorWidth(currentMonitor) <= targetWidth) {
 		ToggleFullscreen();
 		SetWindowSize(GetScreenWidth(), GetScreenHeight());
 	}
+	SetTargetFPS(GetMonitorRefreshRate(currentMonitor));
 }
 
 void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInput, MaxViews>& gameInputs) {
