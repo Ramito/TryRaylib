@@ -143,7 +143,7 @@ namespace {
 		return backgroundCamera;
 	}
 
-	void RenderView(const Camera& camera, const Rectangle& viewPort, RenderTexture& viewTexture, RenderTexture& backgroundTexture, RenderTexture& bulletTexture, const RenderPayload& payload) {
+	void RenderBackground(RenderTexture& backgroundTexture, RenderTexture& bulletTexture, const RenderPayload& payload) {
 		BeginTextureMode(bulletTexture);
 		ClearBackground(BLANK);
 		BeginMode3D(payload.BackgroundCamera);
@@ -158,7 +158,10 @@ namespace {
 		DrawToCurrentTarget(payload.BackgroundList);
 		EndMode3D();
 		EndTextureMode();
+	}
 
+	void RenderView(const Rectangle& viewPort, RenderTexture& viewTexture, RenderTexture& backgroundTexture, RenderTexture& bulletTexture, const RenderPayload& payload)
+	{
 		BeginTextureMode(bulletTexture);
 		BeginMode3D(payload.MainCamera);
 		DrawBulletsToCurrentTarget(payload.MainList);
@@ -266,27 +269,36 @@ void Render::DrawScreenTexture(const entt::registry& registry) {
 		};
 
 		for (size_t i = 0; i < mViews; ++i) {
-			mRenderTasks.push_back(makeMainTask(i, BakeSpaceshipsRenderList));
-			mRenderTasks.push_back(makeMainTask(i, BakeAsteroidsRenderList));
-			mRenderTasks.push_back(makeMainTask(i, BakeParticlesRenderList));
-			mRenderTasks.push_back(makeMainTask(i, BakeBulletsRenderList));
-			mRenderTasks.push_back(makeMainTask(i, BakeExplosionsRenderList));
-
 			mRenderTasks.push_back(makeBackgroundTask(i, BakeSpaceshipsRenderList));
 			mRenderTasks.push_back(makeBackgroundTask(i, BakeAsteroidsRenderList));
 			mRenderTasks.push_back(makeBackgroundTask(i, BakeParticlesRenderList));
 			mRenderTasks.push_back(makeBackgroundTask(i, BakeBulletsRenderList));
 			mRenderTasks.push_back(makeBackgroundTask(i, BakeExplosionsRenderList));
 		}
+
+		for (size_t i = 0; i < mViews; ++i) {
+			mRenderTasks.push_back(makeMainTask(i, BakeSpaceshipsRenderList));
+			mRenderTasks.push_back(makeMainTask(i, BakeAsteroidsRenderList));
+			mRenderTasks.push_back(makeMainTask(i, BakeParticlesRenderList));
+			mRenderTasks.push_back(makeMainTask(i, BakeBulletsRenderList));
+			mRenderTasks.push_back(makeMainTask(i, BakeExplosionsRenderList));
+		}
 	}
 
 	mThreadPool.PushTasks(mRenderTasks.begin(), mRenderTasks.end());
+
 	for (size_t i = 0; i < mViews; ++i) {
-		while (mRenderPayloads[i].MainList.BakeProgress < RenderList::MaxBakeProgress
-			|| mRenderPayloads[i].BackgroundList.BakeProgress < RenderList::MaxBakeProgress) {
+		while (mRenderPayloads[i].BackgroundList.BakeProgress < RenderList::MaxBakeProgress) {
 			mThreadPool.TryHelpOneTask();
 		}
-		RenderView(mCameras[i], mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i], mRenderPayloads[i]);
+		RenderBackground(mBackgroundTextures[i], mBulletTextures[i], mRenderPayloads[i]);
+	}
+
+	for (size_t i = 0; i < mViews; ++i) {
+		while (mRenderPayloads[i].MainList.BakeProgress < RenderList::MaxBakeProgress) {
+			mThreadPool.TryHelpOneTask();
+		}
+		RenderView(mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i], mRenderPayloads[i]);
 	}
 
 	BeginTextureMode(mScreenTexture);
