@@ -66,5 +66,6 @@ struct ParticleCollisionComponent {
 
 struct ExplosionComponent {
 	float StartTime;
-	float Radius;
+	float CurrentRadius;
+	float TerminalRadius;
 };

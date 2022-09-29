@@ -76,6 +76,6 @@ namespace ParticleData {
 namespace ExplosionData {
 	constexpr float Time = 0.2f;
 	constexpr float SpaceshipRadius = 3.5f;
-	constexpr float AsteroidMultiplier = 1.f;
+	constexpr float AsteroidMultiplier = 1.2f;
 	constexpr float ParticleForce = 150.f;
 }

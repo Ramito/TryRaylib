@@ -3,19 +3,19 @@
 #include "raygui.h"
 
 void Menu::UpdateMenu(std::function<void(uint32_t)>&& startgameAction) {
-	mPadState.Active = mMenuActive && IsGamepadAvailable(0);
-	if (mPadState.Active) {
+	mSelectionState.Active = mMenuActive;
+	if (mSelectionState.Active) {
 		constexpr int SelectionCount = 2;
-		if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_FACE_DOWN)) {
-			mPadState.Selection += 1;
-			if (mPadState.Selection >= SelectionCount) {
-				mPadState.Selection -= SelectionCount;
+		if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_FACE_DOWN) || IsKeyPressed(KEY_S)) {
+			mSelectionState.Selection += 1;
+			if (mSelectionState.Selection >= SelectionCount) {
+				mSelectionState.Selection -= SelectionCount;
 			}
 		}
-		if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_FACE_UP)) {
-			mPadState.Selection -= 1;
-			if (mPadState.Selection < 0) {
-				mPadState.Selection += SelectionCount;
+		if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_LEFT_FACE_UP) || IsKeyPressed(KEY_W)) {
+			mSelectionState.Selection -= 1;
+			if (mSelectionState.Selection < 0) {
+				mSelectionState.Selection += SelectionCount;
 			}
 		}
 	}
@@ -28,7 +28,7 @@ void Menu::UpdateMenu(std::function<void(uint32_t)>&& startgameAction) {
 		startgameAction(2);
 		mP2Button = false;
 	}
-	if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_RIGHT))
+	if (IsGamepadButtonPressed(0, GAMEPAD_BUTTON_MIDDLE_RIGHT) || IsKeyPressed(KEY_ENTER))
 	{
 		mMenuActive = !mMenuActive;
 	}
@@ -75,13 +75,13 @@ void Menu::DrawMenu() {
 
 	GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
 
-	if (mPadState.Active) {
+	if (mSelectionState.Active) {
 		GuiLock();
 	}
 
-	if (mPadState.Selection == 0 && mPadState.Active) {
+	if (mSelectionState.Selection == 0 && mSelectionState.Active) {
 		GuiSetState(STATE_FOCUSED);
-		mP1Button = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+		mP1Button = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsKeyPressed(KEY_SPACE);
 	}
 	else {
 		GuiSetState(STATE_NORMAL);
@@ -92,9 +92,9 @@ void Menu::DrawMenu() {
 
 	button.y += 1.25f * buttonHeight;
 
-	if (mPadState.Selection == 1 && mPadState.Active) {
+	if (mSelectionState.Selection == 1 && mSelectionState.Active) {
 		GuiSetState(STATE_FOCUSED);
-		mP2Button = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+		mP2Button = IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_FACE_DOWN) || IsKeyPressed(KEY_SPACE);
 	}
 	else {
 		GuiSetState(STATE_NORMAL);
