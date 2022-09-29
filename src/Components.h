@@ -23,7 +23,7 @@ struct PositionComponent {
 };
 
 struct OrientationComponent {
-	Quaternion Quaternion;
+	Quaternion Rotation;
 };
 
 struct VelocityComponent {

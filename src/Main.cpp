@@ -11,18 +11,16 @@
 #include <mutex>
 #include <stack>
 #include <queue>
+#include <thread>
+#include <stop_token>
 
 static void SetupWindow() {
 	SetTargetFPS(SimTimeData::TargetFPS);
-	int targetWidth = 2560;
-	int targetHeight = 1440;
+	int targetWidth = GetScreenWidth() * 2 / 3;
+	int targetHeight = GetScreenHeight() * 2 / 3;
+	SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 	InitWindow(targetWidth, targetHeight, "Game");
 	SetConfigFlags(ConfigFlags::FLAG_WINDOW_UNDECORATED);
-
-	if (GetMonitorWidth(GetCurrentMonitor()) <= targetWidth) {
-		ToggleFullscreen();
-		SetWindowSize(GetScreenWidth(), GetScreenHeight());
-	}
 }
 
 void UpdateInput(const std::array<Camera, 4>& cameras, std::array<GameInput, 4>& gameInputs) {
@@ -86,7 +84,7 @@ static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras) {
 	}
 }
 
-void main() {
+int main() {
 	SetupWindow();
 	auto gameInput = std::make_shared<std::array<GameInput, 4>>();
 	auto gameCameras = std::make_shared<GameCameras>();

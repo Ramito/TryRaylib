@@ -161,7 +161,7 @@ void Simulation::Simulate() {
 			Vector3 inputTarget = { input.Left, 0.f, input.Forward };
 			float inputLength = Vector3Length(inputTarget);
 
-			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
+			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Rotation);
 
 			Vector3 inputDirection = forward;
 			if (!FloatEquals(inputLength, 0.f)) {
@@ -261,7 +261,7 @@ void Simulation::Simulate() {
 
 				resultingQuaternion = QuaternionMultiply(yawQuaternion, rollQuaternion);
 			}
-			orientationComponent.Quaternion = resultingQuaternion;
+			orientationComponent.Rotation = resultingQuaternion;
 	};
 	playerView.each(playerProcess);
 
@@ -279,7 +279,7 @@ void Simulation::Simulate() {
 			uint32_t particles = MinParticles + relativeThrust * relativeThrust * MaxParticles;
 
 			Vector3 baseVelocity = velocityComponent.Velocity;
-			Vector3 back = Vector3RotateByQuaternion(Back3, orientationComponent.Quaternion);
+			Vector3 back = Vector3RotateByQuaternion(Back3, orientationComponent.Rotation);
 			baseVelocity = Vector3Add(baseVelocity, Vector3Scale(back, thrustComponent.Thrust * ThrustModule * deltaTime));
 
 			while (particles-- > 0) {
@@ -627,14 +627,14 @@ void Simulation::Simulate() {
 			if (gunComponent.TimeSinceLastShot < WeaponData::RateOfFire) {
 				return;
 			}
-			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Quaternion);
-			Vector3 offset = Vector3RotateByQuaternion(WeaponData::ShootBones[gunComponent.NextShotBone], orientationComponent.Quaternion);
+			Vector3 forward = Vector3RotateByQuaternion(Forward3, orientationComponent.Rotation);
+			Vector3 offset = Vector3RotateByQuaternion(WeaponData::ShootBones[gunComponent.NextShotBone], orientationComponent.Rotation);
 			Vector3 shotPosition = Vector3Add(positionComponent.Position, offset);
 			Vector3 shotVelocity = Vector3Add(velocityComponent.Velocity, Vector3Scale(forward, WeaponData::BulletSpeed));
 			entt::entity bullet = mRegistry.create();
 			mRegistry.emplace<BulletComponent>(bullet);
 			mRegistry.emplace<PositionComponent>(bullet, shotPosition);
-			mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Quaternion);
+			mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Rotation);
 			mRegistry.emplace<VelocityComponent>(bullet, shotVelocity);
 			mRegistry.emplace<ParticleComponent>(bullet, WeaponData::BulletLifetime);
 			gunComponent.NextShotBone += 1;

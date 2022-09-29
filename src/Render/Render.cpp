@@ -141,7 +141,7 @@ namespace {
 			auto& position = registry.get<PositionComponent>(entity);
 			auto& orientation = registry.get<OrientationComponent>(entity);
 			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position.Position, SpaceshipData::CollisionRadius)) {
-				DrawSpaceShip(renderPosition.value(), orientation.Quaternion);
+				DrawSpaceShip(renderPosition.value(), orientation.Rotation);
 			}
 		}
 
@@ -184,7 +184,8 @@ namespace {
 			const float relativeTime = std::clamp((gameTime - explosionComponent.StartTime) / ExplosionData::Time, 0.f, 1.f);
 			const float radiusModule = std::cbrt(relativeTime);
 			const float radius = radiusModule * explosionComponent.Radius;
-			Color color = { 255, 255, 255, (1.f - relativeTime) * 255 };
+			const unsigned char alpha = static_cast<unsigned char>((1.f - relativeTime) * 255);
+			Color color = { 255, 255, 255,  alpha};
 			if (auto renderPosition = FindFrustumVisiblePosition(frustum, position, radius)) {
 				DrawSphere(renderPosition.value(), explosionComponent.Radius * radiusModule, color);
 			}
