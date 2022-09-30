@@ -15,13 +15,13 @@
 #include <stop_token>
 
 static void SetupWindow() {
+	InitWindow(0, 0, "Game");
+	SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_UNDECORATED);
 	const int display = GetCurrentMonitor();
 	const int targetWidth = GetMonitorWidth(display) * 2 / 3;
 	const int targetHeight = GetMonitorHeight(display) * 2 / 3;
-	SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-	InitWindow(targetWidth, targetHeight, "Game");
-	SetConfigFlags(ConfigFlags::FLAG_WINDOW_UNDECORATED);
-	SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
+	SetWindowSize(targetWidth, targetHeight);
+	SetTargetFPS(GetMonitorRefreshRate(display));
 }
 
 void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInput, MaxViews>& gameInputs) {
