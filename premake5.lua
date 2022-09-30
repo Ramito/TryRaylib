@@ -10,6 +10,7 @@ local LIB_DIR = "lib"
 local ENTT_DIR = path.join(LIB_DIR, "entt")
 local RAYLIB_DIR = path.join(LIB_DIR, "raylib")
 local RAYGUI_DIR = path.join(LIB_DIR, "raygui")
+local TRACY_DIR = path.join(LIB_DIR, "tracy")
 
 solution "RayTest"
 	location(BUILD_DIR)
@@ -40,20 +41,23 @@ project "Game"
 		"src/**.cpp",
 		"src/**.h",
 		RAYGUI_DIR .. "/src/**.h",
-		RAYGUI_DIR .. "/src/**.c"
+		RAYGUI_DIR .. "/src/**.c",
+		TRACY_DIR .. "/TracyClient.cpp"
 	}
 
-	includedirs
-	{
-		SRC_DIR
-	}
+	includedirs {SRC_DIR}
 
 	includedirs {ENTT_DIR .. "/src"}
+
 	includedirs {RAYGUI_DIR .. "/src"}
 	defines("RAYGUI_IMPLEMENTATION")
 
-	links {"raylib"}
 	includedirs {RAYLIB_DIR .. "/src", RAYLIB_DIR .. "/src/external/glfw/include" }
+
+	includedirs {TRACY_DIR }
+	defines {"TRACY_ENABLE"}
+
+	links {"raylib"}
 	defines{"PLATFORM_DESKTOP"}
 	defines{"GRAPHICS_API_OPENGL_43"}
 	defines{"_WINSOCK_DEPRECATED_NO_WARNINGS", "_CRT_SECURE_NO_WARNINGS"}
@@ -101,3 +105,5 @@ project "raylib"
         ["Source Files/*"] = { RAYLIB_DIR .. "/src/**.c"},
     }
     files {RAYLIB_DIR .. "/src/*.h", RAYLIB_DIR .. "/src/*.c"}
+
+		

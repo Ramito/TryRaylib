@@ -1,4 +1,5 @@
 #include "Simulation.h"
+#include "Tracy.hpp"
 
 #include "Components.h"
 #include <raymath.h>
@@ -93,6 +94,7 @@ void Simulation::DestroySpaceship(entt::entity spaceship, const Vector3 position
 
 template<typename TComponent>
 static void CopyStorage(const entt::registry& source, entt::registry& target) {
+	ZoneScopedN("CopyStorage");
 	auto view = source.view<TComponent>();
 	if constexpr (std::is_empty<TComponent>()) {
 		for (auto entity : view) {
@@ -110,6 +112,7 @@ static void CopyStorage(const entt::registry& source, entt::registry& target) {
 
 void Simulation::WriteRenderState(entt::registry& target) const
 {
+	ZoneScopedN("WriteRenderState");
 	assert(target.empty());
 	target.reserve(mRegistry.size());
 	target.assign(mRegistry.data(), mRegistry.data() + mRegistry.size(), mRegistry.released());
@@ -124,6 +127,7 @@ void Simulation::WriteRenderState(entt::registry& target) const
 }
 
 void Simulation::Simulate() {
+	ZoneScopedN("Simulate");
 	constexpr float deltaTime = SimTimeData::DeltaTime;
 
 	for (auto entity : mRegistry.view<DestroyComponent>()) {
@@ -350,6 +354,7 @@ void Simulation::Simulate() {
 	auto asteroidView = mRegistry.view<PositionComponent, AsteroidComponent>();
 	auto partitionAsteroids = [this](entt::entity asteroid, const PositionComponent& positionComponent, const AsteroidComponent& asteroidComponent)
 	{
+		ZoneScopedN("partitionAsteroids");
 		const float radius = asteroidComponent.Radius;
 		const Vector2 flatPosition = { positionComponent.Position.x, positionComponent.Position.z };
 		const Vector2 min = { flatPosition.x - radius, flatPosition.y - radius };
@@ -394,6 +399,7 @@ void Simulation::Simulate() {
 	};
 
 	auto collisionHandler = [&](CollisionPayload collider1, CollisionPayload collider2) {
+		ZoneScopedN("collisionHandler");
 		const Vector3& position1 = mRegistry.get<PositionComponent>(collider1.Entity).Position;
 		const Vector3& position2 = mRegistry.get<PositionComponent>(collider2.Entity).Position;
 
@@ -470,6 +476,7 @@ void Simulation::Simulate() {
 
 	auto particleCollisionProcess = [&](entt::entity particle, const ParticleComponent&, const PositionComponent& positionComponent, VelocityComponent& velocityComponent)
 	{
+		ZoneScopedN("particleCollisionProcess");
 		auto particleCollisionHandler = [&](CollisionPayload collider) {
 			const Vector3& colliderVelocity = mRegistry.get<VelocityComponent>(collider.Entity).Velocity;
 			const Vector3 impactVelocity = Vector3Subtract(velocityComponent.Velocity, colliderVelocity);
@@ -508,6 +515,7 @@ void Simulation::Simulate() {
 
 	auto bulletCollisionView = mRegistry.view<BulletComponent, PositionComponent, VelocityComponent>();
 	auto bulletCollisionProcess = [&](entt::entity bullet, const PositionComponent& positionComponent, VelocityComponent& velocityComponent) {
+		ZoneScopedN("bulletCollisionProcess");
 		auto bulletCollisionHandler = [&](CollisionPayload collider) {
 			const float radius = mRegistry.all_of<SpaceshipInputComponent>(collider.Entity) ? SpaceshipData::CollisionRadius : collider.Radius;
 
