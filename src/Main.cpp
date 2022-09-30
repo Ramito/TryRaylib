@@ -15,8 +15,9 @@
 #include <stop_token>
 
 static void SetupWindow() {
-	int targetWidth = GetScreenWidth() * 2 / 3;
-	int targetHeight = GetScreenHeight() * 2 / 3;
+	const int display = GetCurrentMonitor();
+	const int targetWidth = GetMonitorWidth(display) * 2 / 3;
+	const int targetHeight = GetMonitorHeight(display) * 2 / 3;
 	SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 	InitWindow(targetWidth, targetHeight, "Game");
 	SetConfigFlags(ConfigFlags::FLAG_WINDOW_UNDECORATED);
