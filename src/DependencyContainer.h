@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 template <typename ContainerType>
@@ -41,7 +42,7 @@ public:
 	template <typename DependencyType, typename... Args>
 	DependencyType& GetDependency() const
 	{
-		size_t id = DependencyID<std::remove_const<DependencyType>::type>::ID();
+		size_t id = DependencyID<typename std::remove_const_t<DependencyType>>::ID();
 		assert(id < mDependencies.size());
 		return *static_cast<DependencyType*>(mDependencies[id].get());
 	}
@@ -53,7 +54,7 @@ public:
 		assert(id < mDependencies.size());
 		const std::shared_ptr<DependencyType>& dependency =
 			std::static_pointer_cast<DependencyType>(mDependencies[id]);
-		receivingContainer.AddDependency<DependencyType>(dependency);
+		receivingContainer.template AddDependency<DependencyType>(dependency);
 		return *dependency;
 	}
 

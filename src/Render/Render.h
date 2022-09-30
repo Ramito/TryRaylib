@@ -33,7 +33,7 @@ struct RenderTaskSource {
 };
 
 struct RenderTaskInput {
-	Camera Camera;
+	Camera TargetCamera;
 	CameraFrustum Frustum;
 };
 

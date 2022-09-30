@@ -120,8 +120,8 @@ namespace {
 		}
 
 		for (const auto& [position, radius, relativeRadius] : list.Explosions) {
-			float alpha = cbrt(1.f - relativeRadius);
-			Color color = { 255, 255, 255, rintf(alpha * 255) };
+			const unsigned char alpha = static_cast<unsigned char>(rintf(cbrt(1.f - relativeRadius) * 255));
+			Color color = { 255, 255, 255, alpha };
 			DrawSphere(position, radius, color);
 		}
 
@@ -230,12 +230,12 @@ void Render::DrawScreenTexture(const entt::registry& registry) {
 		RenderTaskInput& input = mRenderTaskInputs[i];
 		const Camera& mainCamera = mCameras[i / 2];
 		if (i % 2 == 0) {
-			input.Camera = mainCamera;
+			input.TargetCamera = mainCamera;
 		}
 		else {
-			input.Camera = MakeBackgroundCamera(mainCamera);
+			input.TargetCamera = MakeBackgroundCamera(mainCamera);
 		}
-		input.Frustum = ComputeFrustum(input.Camera, mRenderTaskSources[i / 2].Viewport);
+		input.Frustum = ComputeFrustum(input.TargetCamera, mRenderTaskSources[i / 2].Viewport);
 	}
 
 	auto clearRenderList = [](RenderList& list) {
@@ -249,9 +249,9 @@ void Render::DrawScreenTexture(const entt::registry& registry) {
 
 	for (size_t i = 0; i < mViews; ++i) {
 		RenderPayload& payload = mRenderPayloads[i];
-		payload.MainCamera = mRenderTaskInputs[2 * i].Camera;
+		payload.MainCamera = mRenderTaskInputs[2 * i].TargetCamera;
 		clearRenderList(payload.MainList);
-		payload.BackgroundCamera = mRenderTaskInputs[2 * i + 1].Camera;
+		payload.BackgroundCamera = mRenderTaskInputs[2 * i + 1].TargetCamera;
 		clearRenderList(payload.BackgroundList);
 	}
 
@@ -323,7 +323,7 @@ void Render::BakeSpaceshipsRenderList(const RenderTaskSource& source, const Rend
 	for (auto entity : source.SimFrame->view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
 		auto& position = source.SimFrame->get<PositionComponent>(entity).Position;
 		if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, SpaceshipData::CollisionRadius)) {
-			auto& orientation = source.SimFrame->get<OrientationComponent>(entity).Quaternion;
+			auto& orientation = source.SimFrame->get<OrientationComponent>(entity).Rotation;
 			targetList.Spaceships.emplace_back(renderPosition.value(), orientation);
 		}
 	}
@@ -377,4 +377,3 @@ void Render::BakeExplosionsRenderList(const RenderTaskSource& source, const Rend
 	}
 	targetList.BakeProgress += 1;
 }
-

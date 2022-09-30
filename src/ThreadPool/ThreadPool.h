@@ -1,5 +1,6 @@
 #pragma once
 
+#include <condition_variable>
 #include <functional>
 #include <mutex>
 #include <queue>
@@ -22,8 +23,8 @@ public:
 	bool TryHelpOneTask();
 
 private:
-	__forceinline bool threadDoTask(std::stop_token stopCondition);
-	__forceinline void joinThreads();
+	inline bool threadDoTask(std::stop_token stopCondition);
+	inline void joinThreads();
 
 	std::mutex mTaskMutex;
 	std::condition_variable mTaskCondition;

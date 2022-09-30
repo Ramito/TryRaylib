@@ -11,19 +11,17 @@
 #include <mutex>
 #include <stack>
 #include <queue>
+#include <thread>
+#include <stop_token>
 
 static void SetupWindow() {
-	int targetWidth = 2560;
-	int targetHeight = 1440;
-	InitWindow(targetWidth, targetHeight, "Game");
-	SetConfigFlags(ConfigFlags::FLAG_WINDOW_UNDECORATED);
-
-	int currentMonitor = GetCurrentMonitor();
-	if (GetMonitorWidth(currentMonitor) <= targetWidth) {
-		ToggleFullscreen();
-		SetWindowSize(GetScreenWidth(), GetScreenHeight());
-	}
-	SetTargetFPS(GetMonitorRefreshRate(currentMonitor));
+	InitWindow(0, 0, "Game");
+	SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_UNDECORATED);
+	const int display = GetCurrentMonitor();
+	const int targetWidth = GetMonitorWidth(display) * 2 / 3;
+	const int targetHeight = GetMonitorHeight(display) * 2 / 3;
+	SetWindowSize(targetWidth, targetHeight);
+	SetTargetFPS(GetMonitorRefreshRate(display));
 }
 
 void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInput, MaxViews>& gameInputs) {
@@ -87,7 +85,7 @@ static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras) {
 	}
 }
 
-void main() {
+int main() {
 	SetupWindow();
 	auto gameInput = std::make_shared<std::array<GameInput, MaxViews>>();
 	auto gameCameras = std::make_shared<GameCameras>();

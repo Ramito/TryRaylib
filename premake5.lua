@@ -28,7 +28,7 @@ solution "RayTest"
 	filter "platforms:x86_64"
 		architecture "x86_64"
 	filter {}
-	
+
 project "Game"
 	kind "WindowedApp"
 	entrypoint "mainCRTStartup"
@@ -45,36 +45,33 @@ project "Game"
 
 	includedirs
 	{
-        SRC_DIR
+		SRC_DIR
 	}
 
 	includedirs {ENTT_DIR .. "/src"}
 	includedirs {RAYGUI_DIR .. "/src"}
 	defines("RAYGUI_IMPLEMENTATION")
 
-    links {"raylib"}
+	links {"raylib"}
 	includedirs {RAYLIB_DIR .. "/src", RAYLIB_DIR .. "/src/external/glfw/include" }
 	defines{"PLATFORM_DESKTOP"}
-    defines{"GRAPHICS_API_OPENGL_43"}
+	defines{"GRAPHICS_API_OPENGL_43"}
 	defines{"_WINSOCK_DEPRECATED_NO_WARNINGS", "_CRT_SECURE_NO_WARNINGS"}
 	dependson {"raylib"}
-	links {"raylib.lib"}
 	characterset ("MBCS")
-	defines{"_WIN32"}
-	links {"winmm", "kernel32", "opengl32", "gdi32"}
+
+	filter "system:Windows"
+		links {"raylib.lib"}
+		defines{"_WIN32"}
+		links {"winmm", "kernel32", "opengl32", "gdi32"}
+
+	filter{}
 	libdirs {TARGET_DIR}
 
-project "entt"
-	kind "None"
-	language "C++"
-	cppdialect "C++17"
-	exceptionhandling "Off"
-	rtti "Off"
-	files
-	{
-		path.join(ENTT_DIR, "src/**.h"),
-		path.join(ENTT_DIR, "src/**.hpp")
-	}
+-- Older versions of premake can't handle "None" project types for gmake2
+if _TARGET_OS ~= "linux" then
+	include "entt-premake5.lua"
+end
 
 project "raylib"
     kind "StaticLib"
@@ -89,11 +86,13 @@ project "raylib"
         defines{"_WINSOCK_DEPRECATED_NO_WARNINGS", "_CRT_SECURE_NO_WARNINGS"}
         characterset ("MBCS")
 
+
+	filter "system:Windows"
+		defines{"_WIN32"}
+		links {"winmm", "kernel32", "opengl32", "gdi32"}
+
     filter{}
 
-    defines{"_WIN32"}
-    links {"winmm", "kernel32", "opengl32", "gdi32"}
-    
     print ("Using raylib dir " .. RAYLIB_DIR);
     includedirs {RAYLIB_DIR .. "/src", RAYLIB_DIR .. "/src/external/glfw/include" }
     vpaths
