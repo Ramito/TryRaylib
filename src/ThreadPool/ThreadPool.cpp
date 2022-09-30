@@ -1,4 +1,5 @@
 #include "ThreadPool.h"
+#include "Tracy.hpp"
 #include <cassert>
 
 ThreadPool::ThreadPool(size_t threadCount) : ThreadCount(threadCount)
@@ -44,6 +45,7 @@ void ThreadPool::PushTasks(std::vector<Task>::iterator first, std::vector<Task>:
 
 bool ThreadPool::TryHelpOneTask()
 {
+	ZoneScopedN("TryHelpOneTask");
 	Task* task;
 	{
 		std::unique_lock<std::mutex> lock(mTaskMutex);
@@ -59,6 +61,7 @@ bool ThreadPool::TryHelpOneTask()
 
 bool ThreadPool::threadDoTask(std::stop_token exitThreadCondition)
 {
+	ZoneScopedN("threadDoTask");
 	Task* task;
 	{
 		std::unique_lock<std::mutex> lock(mTaskMutex);

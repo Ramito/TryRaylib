@@ -8,6 +8,7 @@
 #include "Simulation/Simulation.h"
 #include "Render/Render.h"
 #include "Menu.h"
+#include "Tracy.hpp"
 #include <mutex>
 #include <stack>
 #include <queue>
@@ -25,6 +26,7 @@ static void SetupWindow() {
 }
 
 void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInput, MaxViews>& gameInputs) {
+	ZoneScopedN("Update Input");
 	for (size_t idx = 0; idx < gameInputs.size(); ++idx) {
 		GameInput& gameInput = gameInputs[idx];
 		const Camera& camera = cameras[idx];
@@ -76,6 +78,7 @@ static void SetViewports(size_t count, ViewPorts& viewPorts) {
 }
 
 static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras) {
+	ZoneScopedN("Update Cameras");
 	for (auto playerEntity : registry.view<PositionComponent, SpaceshipInputComponent>()) {
 		auto& input = registry.get<SpaceshipInputComponent>(playerEntity);
 		auto& position = registry.get<PositionComponent>(playerEntity);
@@ -118,6 +121,7 @@ int main() {
 	writeReadySnapshots.push(0);
 
 	auto simThreadProcess = [&](std::stop_token sToken) {
+		ZoneScopedN("Sim Thread");
 		double gameStartTime = GetTime();
 		uint32_t simTicks = 0;
 		while (!sToken.stop_requested()) {
@@ -142,6 +146,7 @@ int main() {
 
 			double gameTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
 			if (auto waitTime = gameTime - GetTime(); waitTime > 0.0) {
+				ZoneScopedN("Sleep");
 				std::chrono::duration<double> sleepDuration(waitTime);
 				std::this_thread::sleep_for(sleepDuration);
 			}
@@ -162,6 +167,7 @@ int main() {
 	};
 
 	while (!WindowShouldClose()) {
+		ZoneScopedN("Main Loop");
 		menu.UpdateMenu(startGameAction);
 		if (!renderReadySnapshots.empty()) {
 			simSnapShots[renderSnapshot].clear();
