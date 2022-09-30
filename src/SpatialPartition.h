@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "raymath.h"
-#include "Tracy.hpp"
 
 template<typename TPayload>
 class SpatialPartition {
@@ -37,7 +36,6 @@ public:
 	}
 
 	void FlushInsertions() {
-		ZoneScopedN("FlushInsertions");
 		auto countAction = [this](uint32_t cellIt) {
 			uint32_t cellIndex = mSparseCells[cellIt];
 			bool exists = cellIndex < mPackedCells.size() && mPackedCells[cellIndex] == cellIt;
