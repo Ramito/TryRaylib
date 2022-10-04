@@ -22,6 +22,7 @@ static void SetupWindow()
     const int display = GetCurrentMonitor();
     const int targetWidth = GetMonitorWidth(display) * 2 / 3;
     const int targetHeight = GetMonitorHeight(display) * 2 / 3;
+    SetWindowPosition(targetWidth / 6, targetHeight / 6);
     SetWindowSize(targetWidth, targetHeight);
     SetTargetFPS(GetMonitorRefreshRate(display));
 }
