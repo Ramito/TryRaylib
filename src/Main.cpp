@@ -90,6 +90,16 @@ static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras)
         gameCameras[input.InputId].target = target;
         gameCameras[input.InputId].position = Vector3Add(target, CameraData::CameraOffset);
     }
+    for (auto playerEntity : registry.view<PositionComponent, RespawnComponent>()) {
+        const auto& respawn = registry.get<RespawnComponent>(playerEntity);
+        if (respawn.TimeLeft > 0.f) {
+            continue;
+        }
+        auto& position = registry.get<PositionComponent>(playerEntity);
+        const Vector3 target = Vector3Add(position.Position, CameraData::TargetOffset);
+        gameCameras[respawn.InputId].target = target;
+        gameCameras[respawn.InputId].position = Vector3Add(target, CameraData::CameraOffset);
+    }
 }
 
 int main()

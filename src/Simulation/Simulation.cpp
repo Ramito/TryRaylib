@@ -20,15 +20,20 @@ static void MakeAsteroid(entt::registry& registry, float radius, const Vector3 p
     registry.emplace<VelocityComponent>(asteroid, velocity);
 }
 
-static void SpawnSpaceship(entt::registry& registry, uint32_t inputID)
+static Vector3 DefaultPlayerPosition(uint32_t inputID)
 {
     const float x = inputID * SpaceData::LengthX / 2.f;
     const float z = inputID * SpaceData::LengthZ / 2.f;
+    return {x, 0.f, z};
+}
+
+static void SpawnSpaceship(entt::registry& registry, const Vector3& position, uint32_t inputID)
+{
     entt::entity player = registry.create();
     registry.emplace<SpaceshipInputComponent>(player, inputID, GameInput{0.f, 0.f, false});
     registry.emplace<SteerComponent>(player, 0.f);
     registry.emplace<ThrustComponent>(player, 0.f);
-    registry.emplace<PositionComponent>(player, x, 0.f, z);
+    registry.emplace<PositionComponent>(player, position);
     registry.emplace<VelocityComponent>(player, 0.f, 0.f, 0.f);
     registry.emplace<OrientationComponent>(player, QuaternionIdentity());
     registry.emplace<GunComponent>(player, 0.f, 0u);
@@ -40,7 +45,7 @@ void Simulation::Init(uint32_t players)
     mRegistry.reserve(64000);
 
     for (uint32_t player = 0; player < players; ++player) {
-        SpawnSpaceship(mRegistry, player);
+        SpawnSpaceship(mRegistry, DefaultPlayerPosition(player), player);
     }
 
     std::uniform_real_distribution<float> xDistribution(0.f, SpaceData::LengthX);
@@ -145,6 +150,10 @@ void Simulation::WriteRenderState(entt::registry& target) const
         ZoneScopedN("Spaceships");
         CopyStorage<SpaceshipInputComponent>(mRegistry, target);
     }
+    {
+        ZoneScopedN("Spawners");
+        CopyStorage<RespawnComponent>(mRegistry, target);
+    }
 }
 
 void Simulation::Simulate()
@@ -154,14 +163,26 @@ void Simulation::Simulate()
     auto destroyView = mRegistry.view<DestroyComponent>();
     mRegistry.destroy(destroyView.begin(), destroyView.end());
 
-    for (auto respawner : mRegistry.view<RespawnComponent>()) {
+    for (auto respawner : mRegistry.view<RespawnComponent, PositionComponent>()) {
         RespawnComponent& respawn = mRegistry.get<RespawnComponent>(respawner);
         respawn.TimeLeft -= deltaTime;
         if (respawn.TimeLeft > 0.f) {
             continue;
         }
-        SpawnSpaceship(mRegistry, respawn.InputId);
-        mRegistry.destroy(respawner);
+        Vector3& position = mRegistry.get<PositionComponent>(respawner).Position;
+        if (!respawn.Primed && !mGameInput[respawn.InputId].Fire) {
+            position.x += mGameInput[respawn.InputId].Left * RespawnData::MarkerMoveSpeed * deltaTime;
+            position.z += mGameInput[respawn.InputId].Forward * RespawnData::MarkerMoveSpeed * deltaTime;
+            continue;
+        }
+        if (!respawn.Primed && mGameInput[respawn.InputId].Fire) {
+            respawn.Primed = true;
+            continue;
+        }
+        if (respawn.Primed && !mGameInput[respawn.InputId].Fire) {
+            SpawnSpaceship(mRegistry, position, respawn.InputId);
+            mRegistry.destroy(respawner);
+        }
     }
 
     auto explosionView = mRegistry.view<ExplosionComponent, PositionComponent>();
@@ -720,7 +741,8 @@ void Simulation::Simulate()
                                          const PositionComponent& positionComponent,
                                          const VelocityComponent& velocityComponent) {
         entt::entity respawner = mRegistry.create();
-        mRegistry.emplace<RespawnComponent>(respawner, inputComponent.InputId, GameData::RespawnTimer);
+        mRegistry.emplace<RespawnComponent>(respawner, inputComponent.InputId, RespawnData::Timer);
+        mRegistry.emplace<PositionComponent>(respawner, DefaultPlayerPosition(inputComponent.InputId));
 
         MakeExplosion(positionComponent.Position, velocityComponent.Velocity, ExplosionData::SpaceshipRadius);
     };

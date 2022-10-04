@@ -22,9 +22,12 @@ constexpr uint32_t TargetFPS = 120;
 constexpr float DeltaTime = 1.f / TargetFPS;
 } // namespace SimTimeData
 
-namespace GameData {
-constexpr float RespawnTimer = 2.f;
-}
+namespace RespawnData {
+constexpr float Timer = 3.f;
+constexpr float MarkerRadius = 1.5f;
+constexpr float MarkerFrequency = 6.5f;
+constexpr float MarkerMoveSpeed = 10.f;
+} // namespace RespawnData
 
 namespace CameraData {
 constexpr Vector3 TargetOffset = {-3.5f, 0.f, -3.5f};

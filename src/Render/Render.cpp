@@ -59,7 +59,7 @@ FindFrustumVisiblePosition(const CameraFrustum& frustum, const Vector3& position
     return {};
 }
 
-void DrawSpaceShip(const Vector3& position, const Quaternion orientation)
+void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const Color color)
 {
     constexpr float Angle = -2.f * PI / 3.f;
     constexpr float Length = 1.25f;
@@ -83,24 +83,32 @@ void DrawSpaceShip(const Vector3& position, const Quaternion orientation)
     relVertex = Vector3RotateByQuaternion(relVertex, triangleQuat);
     Vector3 vertex3 = Vector3Subtract(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
 
-    DrawLine3D(vertex1, vertex2, RED);
-    DrawLine3D(vertex2, vertex3, RED);
-    DrawLine3D(vertex3, vertex1, RED);
+    DrawLine3D(vertex1, vertex2, color);
+    DrawLine3D(vertex2, vertex3, color);
+    DrawLine3D(vertex3, vertex1, color);
     vertex2 = Vector3Add(vertex2, downShift);
     vertex3 = Vector3Subtract(vertex3, downShift);
 
-    DrawLine3D(vertex1, vertex2, RED);
-    DrawLine3D(vertex2, vertex3, RED);
-    DrawLine3D(vertex3, vertex1, RED);
+    DrawLine3D(vertex1, vertex2, color);
+    DrawLine3D(vertex2, vertex3, color);
+    DrawLine3D(vertex3, vertex1, color);
 
     Vector3 midBack = Vector3Lerp(vertex2, vertex3, 0.5f);
-    DrawLine3D(vertex1, midBack, RED);
+    DrawLine3D(vertex1, midBack, color);
 }
 
 void DrawToCurrentTarget(const RenderList& list)
 {
-    for (const auto& [position, orientation] : list.Spaceships) {
-        DrawSpaceShip(position, orientation);
+    constexpr std::array<Color, 2> PlayerColors = {RED, BLUE};
+
+    for (const auto& [position, orientation, inputID] : list.Spaceships) {
+        DrawSpaceShip(position, orientation, PlayerColors[inputID]);
+    }
+
+    for (const auto& [position, inputID] : list.Respawners) {
+        DrawCircle3D(position,
+                     RespawnData::MarkerRadius * 0.5f * (1.f + sin(GetTime() * RespawnData::MarkerFrequency)),
+                     Left3, 90.f, PlayerColors[inputID]);
     }
 
     for (const auto& [position, radius] : list.Asteroids) {
@@ -257,6 +265,7 @@ void Render::DrawScreenTexture(const entt::registry& registry)
     auto clearRenderList = [](RenderList& list) {
         ZoneScopedN("ClearLists");
         list.Spaceships.clear();
+        list.Respawners.clear();
         list.Asteroids.clear();
         list.Particles.clear();
         list.Bullets.clear();
@@ -343,13 +352,28 @@ void Render::BakeSpaceshipsRenderList(const RenderTaskSource& source, const Rend
     targetList.Spaceships.clear();
     for (auto entity :
          source.SimFrame->view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
-        auto& position = source.SimFrame->get<PositionComponent>(entity).Position;
+        const auto& position = source.SimFrame->get<PositionComponent>(entity).Position;
         if (auto renderPosition =
             FindFrustumVisiblePosition(input.Frustum, position, SpaceshipData::CollisionRadius)) {
-            auto& orientation = source.SimFrame->get<OrientationComponent>(entity).Rotation;
-            targetList.Spaceships.emplace_back(renderPosition.value(), orientation);
+            const auto& orientation = source.SimFrame->get<OrientationComponent>(entity).Rotation;
+            const uint32_t inputID = source.SimFrame->get<SpaceshipInputComponent>(entity).InputId;
+            targetList.Spaceships.emplace_back(renderPosition.value(), orientation, inputID);
         }
     }
+
+    for (auto respawner : source.SimFrame->view<RespawnComponent, PositionComponent>()) {
+        const auto& respawnComponent = source.SimFrame->get<RespawnComponent>(respawner);
+        if (respawnComponent.TimeLeft > 0.f) {
+            continue;
+        }
+        const auto& position = source.SimFrame->get<PositionComponent>(respawner).Position;
+        if (auto renderPosition =
+            FindFrustumVisiblePosition(input.Frustum, position, SpaceshipData::CollisionRadius)) {
+            auto& orientation = source.SimFrame->get<OrientationComponent>(respawner).Rotation;
+            targetList.Respawners.emplace_back(renderPosition.value(), respawnComponent.InputId);
+        }
+    }
+
     targetList.BakeProgress += 1;
 }
 

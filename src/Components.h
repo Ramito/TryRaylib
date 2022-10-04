@@ -71,6 +71,7 @@ struct RespawnComponent
 {
     uint32_t InputId;
     float TimeLeft;
+    bool Primed = false;
 };
 
 struct ParticleCollisionComponent
