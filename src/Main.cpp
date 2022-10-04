@@ -83,7 +83,7 @@ static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras)
 {
     ZoneScopedN("Update Cameras");
     for (auto playerEntity : registry.view<PositionComponent, SpaceshipInputComponent>()) {
-        auto& input = registry.get<SpaceshipInputComponent>(playerEntity);
+        const auto& input = registry.get<SpaceshipInputComponent>(playerEntity);
         auto& position = registry.get<PositionComponent>(playerEntity);
         const Vector3 target = Vector3Add(position.Position, CameraData::TargetOffset);
         gameCameras[input.InputId].target = target;

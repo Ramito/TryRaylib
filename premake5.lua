@@ -55,7 +55,9 @@ project "Game"
 	includedirs {RAYLIB_DIR .. "/src", RAYLIB_DIR .. "/src/external/glfw/include" }
 
 	includedirs {TRACY_DIR }
-	defines {"TRACY_ENABLE"}
+	filter "configurations:Release"
+		defines {"TRACY_ENABLE"}
+	filter{}
 
 	links {"raylib"}
 	defines{"PLATFORM_DESKTOP"}
