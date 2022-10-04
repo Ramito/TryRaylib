@@ -17,9 +17,12 @@ solution "RayTest"
 	targetdir(TARGET_DIR)
 	startproject "Game"
 	debugdir(".")
-	configurations { "Release", "Debug" }
+	configurations { "Release", "Profile", "Debug" }
 	platforms "x86_64"
 	filter "configurations:Release"
+		defines "NDEBUG"
+		optimize "Full"
+	filter "configurations:Profile"
 		defines "NDEBUG"
 		optimize "Full"
 	filter "configurations:Debug*"
@@ -55,7 +58,7 @@ project "Game"
 	includedirs {RAYLIB_DIR .. "/src", RAYLIB_DIR .. "/src/external/glfw/include" }
 
 	includedirs {TRACY_DIR }
-	filter "configurations:Release"
+	filter "configurations:Profile"
 		defines {"TRACY_ENABLE"}
 	filter{}
 
