@@ -10,7 +10,8 @@ static std::uniform_real_distribution<float> DirectionDistribution(0.f, 2.f * PI
 Simulation::Simulation(const SimDependencies& dependencies)
 : mRegistry(dependencies.GetDependency<entt::registry>()),
   mGameInput(dependencies.GetDependency<std::remove_reference<decltype(mGameInput)>::type>())
-{}
+{
+}
 
 static void MakeAsteroid(entt::registry& registry, float radius, const Vector3 position, const Vector3 velocity)
 {
