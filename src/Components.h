@@ -51,6 +51,7 @@ struct AsteroidComponent
 struct ParticleComponent
 {
     float LifeTime;
+    Color Color;
 };
 
 struct BulletComponent

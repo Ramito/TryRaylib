@@ -115,22 +115,21 @@ void DrawToCurrentTarget(const RenderList& list)
         DrawSphereWires(position, radius, 8, 8, RAYWHITE);
     }
 
-    for (const auto& position : list.Particles) {
-        DrawPoint3D(position, ORANGE);
+    for (const auto& [position, color] : list.Particles) {
+        DrawPoint3D(position, color);
     }
 }
 
-void DrawBulletsToCurrentTarget(const RenderList& list)
+void DrawBulletsToCurrentTarget(const Camera& camera, const Texture& glow, const RenderList& list)
 {
     BeginBlendMode(BLEND_ALPHA);
     rlDisableDepthMask();
 
-    for (const Vector3& bullet : list.Bullets) {
-        // Ghetto bloom
-        DrawSphere(bullet, 0.05f, WHITE);
-        DrawSphere(bullet, 0.12f, GREEN);
-        DrawSphere(bullet, 0.175f, {0, 228, 48, 180});
-        DrawSphere(bullet, 1.f, {0, 228, 48, 80});
+    for (const auto& [position, color] : list.Bullets) {
+        Vector3 up = Vector3Normalize({1.f, 0.f, 1.f});
+        Rectangle source = {0.0f, 0.0f, (float)glow.width, (float)glow.height};
+        Vector2 size = {2.25f, 2.25f};
+        DrawBillboardPro(camera, glow, source, position, up, size, {}, 0.f, color);
     }
 
     for (const auto& [position, radius, relativeRadius] : list.Explosions) {
@@ -159,13 +158,16 @@ Camera MakeBackgroundCamera(const Camera& camera)
     return backgroundCamera;
 }
 
-void RenderBackground(RenderTexture& backgroundTexture, RenderTexture& bulletTexture, const RenderPayload& payload)
+void RenderBackground(RenderTexture& backgroundTexture,
+                      RenderTexture& bulletTexture,
+                      const RenderPayload& payload,
+                      const Texture& glow)
 {
     ZoneScoped;
     BeginTextureMode(bulletTexture);
     ClearBackground(BLANK);
     BeginMode3D(payload.BackgroundCamera);
-    DrawBulletsToCurrentTarget(payload.BackgroundList);
+    DrawBulletsToCurrentTarget(payload.MainCamera, glow, payload.BackgroundList);
     EndBlendMode();
     EndMode3D();
     EndTextureMode();
@@ -182,12 +184,13 @@ void RenderView(const Rectangle& viewPort,
                 RenderTexture& viewTexture,
                 RenderTexture& backgroundTexture,
                 RenderTexture& bulletTexture,
-                const RenderPayload& payload)
+                const RenderPayload& payload,
+                const Texture& glow)
 {
     ZoneScoped;
     BeginTextureMode(bulletTexture);
     BeginMode3D(payload.MainCamera);
-    DrawBulletsToCurrentTarget(payload.MainList);
+    DrawBulletsToCurrentTarget(payload.MainCamera, glow, payload.MainList);
     EndBlendMode();
     EndMode3D();
     EndTextureMode();
@@ -195,7 +198,7 @@ void RenderView(const Rectangle& viewPort,
     Rectangle target = {0, 0, viewPort.width, -viewPort.height};
 
     BeginTextureMode(viewTexture);
-    ClearBackground({0, 41, 96, 255});
+    ClearBackground({40, 40, 50, 255});
     DrawTextureRec(backgroundTexture.texture, target, Vector2Zero(), GRAY);
     BeginMode3D(payload.MainCamera);
     DrawToCurrentTarget(payload.MainList);
@@ -229,6 +232,10 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
     }
 
     mScreenTexture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+
+    Image glowImage =
+    GenImageGradientRadial(GetScreenWidth() / 16, GetScreenWidth() / 16, 0.05f, WHITE, BLANK);
+    mGlowTexture = LoadTextureFromImage(glowImage);
 }
 
 Render::~Render()
@@ -317,7 +324,7 @@ void Render::DrawScreenTexture(const entt::registry& registry)
         while (mRenderPayloads[i].BackgroundList.BakeProgress < RenderList::MaxBakeProgress) {
             mThreadPool.TryHelpOneTask();
         }
-        RenderBackground(mBackgroundTextures[i], mBulletTextures[i], mRenderPayloads[i]);
+        RenderBackground(mBackgroundTextures[i], mBulletTextures[i], mRenderPayloads[i], mGlowTexture);
     }
 
     for (size_t i = 0; i < mViews; ++i) {
@@ -325,7 +332,7 @@ void Render::DrawScreenTexture(const entt::registry& registry)
             mThreadPool.TryHelpOneTask();
         }
         RenderView(mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i],
-                   mRenderPayloads[i]);
+                   mRenderPayloads[i], mGlowTexture);
     }
 
     BeginTextureMode(mScreenTexture);
@@ -398,7 +405,8 @@ void Render::BakeParticlesRenderList(const RenderTaskSource& source, const Rende
     for (entt::entity particle : source.SimFrame->view<ParticleComponent>(entt::exclude<BulletComponent>)) {
         const Vector3 position = source.SimFrame->get<PositionComponent>(particle).Position;
         if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, 0.f)) {
-            targetList.Particles.emplace_back(renderPosition.value());
+            const Color color = source.SimFrame->get<ParticleComponent>(particle).Color;
+            targetList.Particles.emplace_back(renderPosition.value(), color);
         }
     }
     targetList.BakeProgress += 1;
@@ -411,7 +419,8 @@ void Render::BakeBulletsRenderList(const RenderTaskSource& source, const RenderT
     for (entt::entity particle : source.SimFrame->view<BulletComponent>()) {
         const Vector3 position = source.SimFrame->get<PositionComponent>(particle).Position;
         if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, 0.f)) {
-            targetList.Bullets.emplace_back(renderPosition.value());
+            const Color color = source.SimFrame->get<ParticleComponent>(particle).Color;
+            targetList.Bullets.emplace_back(renderPosition.value(), color);
         }
     }
     targetList.BakeProgress += 1;

@@ -10,8 +10,7 @@ static std::uniform_real_distribution<float> DirectionDistribution(0.f, 2.f * PI
 Simulation::Simulation(const SimDependencies& dependencies)
 : mRegistry(dependencies.GetDependency<entt::registry>()),
   mGameInput(dependencies.GetDependency<std::remove_reference<decltype(mGameInput)>::type>())
-{
-}
+{}
 
 static void MakeAsteroid(entt::registry& registry, float radius, const Vector3 position, const Vector3 velocity)
 {
@@ -94,9 +93,8 @@ void Simulation::MakeExplosion(const Vector3& position, const Vector3& velocity,
         mRegistry.emplace<PositionComponent>(particle, Vector3Add(position, Vector3Scale(radial, 0.1f)));
         mRegistry.emplace<VelocityComponent>(particle,
                                              Vector3Add(velocity, Vector3Scale(radial, ExplosionData::ParticleForce)));
-        mRegistry.emplace<ParticleComponent>(particle, (UniformDistribution(mRandomGenerator) +
-                                                        UniformDistribution(mRandomGenerator)) *
-                                                       14.f);
+        mRegistry.emplace<ParticleComponent>(
+        particle, (UniformDistribution(mRandomGenerator) + UniformDistribution(mRandomGenerator)) * 14.f, GOLD);
         mRegistry.emplace<ParticleDragComponent>(particle);
     }
 };
@@ -305,10 +303,11 @@ void Simulation::Simulate()
     playerView.each(playerProcess);
 
     auto thrustView =
-    mRegistry.view<ThrustComponent, PositionComponent, VelocityComponent, OrientationComponent>();
+    mRegistry.view<ThrustComponent, PositionComponent, VelocityComponent, OrientationComponent, SpaceshipInputComponent>();
     auto thrustParticleProcess = [this](ThrustComponent& thrustComponent, const PositionComponent& positionComponent,
                                         const VelocityComponent& velocityComponent,
-                                        const OrientationComponent& orientationComponent) {
+                                        const OrientationComponent& orientationComponent,
+                                        const SpaceshipInputComponent& inputComponent) {
         constexpr float ThrustModule = 25.f;
         constexpr float RandomModule = 2.5f;
         constexpr float Offset = 0.4f;
@@ -321,6 +320,8 @@ void Simulation::Simulate()
         Vector3 back = Vector3RotateByQuaternion(Back3, orientationComponent.Rotation);
         baseVelocity =
         Vector3Add(baseVelocity, Vector3Scale(back, thrustComponent.Thrust * ThrustModule * deltaTime));
+
+        constexpr std::array<Color, 2> ThrustColors = {ORANGE, LIME};
 
         while (particles-- > 0) {
             entt::entity particleEntity = mRegistry.create();
@@ -335,7 +336,8 @@ void Simulation::Simulate()
             mRegistry.emplace<VelocityComponent>(particleEntity, Vector3Add(baseVelocity, randomVelocity));
             float lifetime =
             14.f * (UniformDistribution(mRandomGenerator) + UniformDistribution(mRandomGenerator));
-            mRegistry.emplace<ParticleComponent>(particleEntity, lifetime);
+            mRegistry.emplace<ParticleComponent>(particleEntity, lifetime,
+                                                 ThrustColors[inputComponent.InputId]);
         }
     };
     thrustView.each(thrustParticleProcess);
@@ -702,7 +704,9 @@ void Simulation::Simulate()
         mRegistry.emplace<PositionComponent>(bullet, shotPosition);
         mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Rotation);
         mRegistry.emplace<VelocityComponent>(bullet, shotVelocity);
-        mRegistry.emplace<ParticleComponent>(bullet, WeaponData::BulletLifetime);
+        constexpr std::array<Color, 2> BulletColors = {SKYBLUE, PINK};
+        mRegistry.emplace<ParticleComponent>(bullet, WeaponData::BulletLifetime,
+                                             BulletColors[inputComponent.InputId]);
         gunComponent.NextShotBone += 1;
         gunComponent.NextShotBone %= WeaponData::ShootBones.size();
         gunComponent.TimeSinceLastShot = 0.f;

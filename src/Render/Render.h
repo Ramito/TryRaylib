@@ -46,8 +46,8 @@ struct RenderList
     std::vector<std::tuple<Vector3, Quaternion, uint32_t>> Spaceships;
     std::vector<std::tuple<Vector3, uint32_t>> Respawners;
     std::vector<std::tuple<Vector3, float>> Asteroids;
-    std::vector<Vector3> Particles;
-    std::vector<Vector3> Bullets;
+    std::vector<std::tuple<Vector3, Color>> Particles;
+    std::vector<std::tuple<Vector3, Color>> Bullets;
     std::vector<std::tuple<Vector3, float, float>> Explosions;
     static constexpr uint32_t MaxBakeProgress = 5;
     std::atomic<uint32_t> BakeProgress = 0;
@@ -91,6 +91,8 @@ private:
     std::array<RenderTexture, MaxViews> mBulletTextures;
     std::array<RenderTexture, MaxViews> mViewPortTextures;
     RenderTexture mScreenTexture;
+
+    Texture mGlowTexture;
 
     ThreadPool mThreadPool;
     std::array<RenderTaskSource, MaxViews> mRenderTaskSources; // One per view port	NOTE: Can remove later, just need the sim frame!

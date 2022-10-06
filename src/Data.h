@@ -26,7 +26,7 @@ namespace RespawnData {
 constexpr float Timer = 3.f;
 constexpr float MarkerRadius = 1.5f;
 constexpr float MarkerFrequency = 6.5f;
-constexpr float MarkerMoveSpeed = 10.f;
+constexpr float MarkerMoveSpeed = 15.f;
 } // namespace RespawnData
 
 namespace CameraData {

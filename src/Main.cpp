@@ -18,7 +18,7 @@
 static void SetupWindow()
 {
     InitWindow(0, 0, "Game");
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_UNDECORATED);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT);
     const int display = GetCurrentMonitor();
     const int targetWidth = GetMonitorWidth(display) * 2 / 3;
     const int targetHeight = GetMonitorHeight(display) * 2 / 3;
