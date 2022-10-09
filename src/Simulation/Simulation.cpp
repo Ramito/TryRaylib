@@ -321,7 +321,7 @@ void Simulation::Simulate()
         baseVelocity =
         Vector3Add(baseVelocity, Vector3Scale(back, thrustComponent.Thrust * ThrustModule * deltaTime));
 
-        constexpr std::array<Color, 2> ThrustColors = {ORANGE, LIME};
+        constexpr std::array<Color, 2> ThrustColors = {PINK, SKYBLUE};
 
         while (particles-- > 0) {
             entt::entity particleEntity = mRegistry.create();
@@ -704,7 +704,7 @@ void Simulation::Simulate()
         mRegistry.emplace<PositionComponent>(bullet, shotPosition);
         mRegistry.emplace<OrientationComponent>(bullet, orientationComponent.Rotation);
         mRegistry.emplace<VelocityComponent>(bullet, shotVelocity);
-        constexpr std::array<Color, 2> BulletColors = {SKYBLUE, PINK};
+        constexpr std::array<Color, 2> BulletColors = {GREEN, YELLOW};
         mRegistry.emplace<ParticleComponent>(bullet, WeaponData::BulletLifetime,
                                              BulletColors[inputComponent.InputId]);
         gunComponent.NextShotBone += 1;
