@@ -258,11 +258,12 @@ void Simulation::Simulate()
             }
         }
 
-        float turnAbility = cosf(steer) * SpaceshipData::Yaw;
-        if (steeringSign == steerSign) {
-            turnAbility += sinf(steer) * SpaceshipData::Pitch;
+        float turnAbility = abs(cosf(steer) * SpaceshipData::Yaw);
+        float pitchTurnAbility = sinf(steer);
+        if (steeringSign == steerSign && pitchTurnAbility >= 0.f) {
+            turnAbility += abs(pitchTurnAbility) * SpaceshipData::Pitch;
         } else {
-            turnAbility += sinf(steer) * 0.25f * SpaceshipData::NegativePitch;
+            turnAbility += abs(pitchTurnAbility) * SpaceshipData::NegativePitch;
         }
 
         steer *= steerSign;

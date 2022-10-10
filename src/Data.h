@@ -55,7 +55,7 @@ constexpr float Yaw = 0.4f;
 constexpr float Pitch = 2.5f;
 constexpr float Roll = 1.5f;
 
-constexpr float NegativePitch = 1.25f;
+constexpr float NegativePitch = 0.5f;
 constexpr float NegativeRoll = 2.75f;
 
 constexpr float SteerB = 0.225f;
