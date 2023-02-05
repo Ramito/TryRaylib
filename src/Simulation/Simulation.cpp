@@ -493,10 +493,10 @@ void Simulation::Simulate()
                 return;
             }
             if (isSpaceship1) {
-                mRegistry.emplace<DestroyComponent>(collider1.Entity);
+                mRegistry.get_or_emplace<DestroyComponent>(collider1.Entity);
             }
             if (isSpaceship2) {
-                mRegistry.emplace<DestroyComponent>(collider2.Entity);
+                mRegistry.get_or_emplace<DestroyComponent>(collider2.Entity);
             }
         };
         mSpatialPartition.IteratePairs(collisionHandler);
