@@ -376,7 +376,6 @@ void Render::BakeSpaceshipsRenderList(const RenderTaskSource& source, const Rend
         const auto& position = source.SimFrame->get<PositionComponent>(respawner).Position;
         if (auto renderPosition =
             FindFrustumVisiblePosition(input.Frustum, position, SpaceshipData::CollisionRadius)) {
-            auto& orientation = source.SimFrame->get<OrientationComponent>(respawner).Rotation;
             targetList.Respawners.emplace_back(renderPosition.value(), respawnComponent.InputId);
         }
     }
