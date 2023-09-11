@@ -220,7 +220,6 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
         camera.fovy = 60.f;
         camera.target = {};
         camera.position = CameraData::CameraOffset;
-        SetCameraMode(camera, CAMERA_CUSTOM);
     }
 
     for (size_t i = 0; i < mViewPorts.size(); ++i) {
