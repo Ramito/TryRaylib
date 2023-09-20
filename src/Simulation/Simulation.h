@@ -24,7 +24,6 @@ public:
 private:
     void Simulate();
     void MakeExplosion(const Vector3& position, const Vector3& velocity, float radius);
-    void DestroySpaceship(entt::entity spaceship, const Vector3 position, const Vector3 velocity);
 
     struct CollisionPayload
     {

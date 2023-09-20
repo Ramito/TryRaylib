@@ -122,7 +122,6 @@ void DrawToCurrentTarget(const RenderList& list)
 
 void DrawBulletsToCurrentTarget(const Camera& camera, const Texture& glow, const RenderList& list)
 {
-    BeginBlendMode(BLEND_ALPHA);
     rlDisableDepthMask();
 
     for (const auto& [position, color] : list.Bullets) {
@@ -190,6 +189,7 @@ void RenderView(const Rectangle& viewPort,
     ZoneScoped;
     BeginTextureMode(bulletTexture);
     BeginMode3D(payload.MainCamera);
+    BeginBlendMode(BLEND_ALPHA);
     DrawBulletsToCurrentTarget(payload.MainCamera, glow, payload.MainList);
     EndBlendMode();
     EndMode3D();
