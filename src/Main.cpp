@@ -20,9 +20,9 @@ static void SetupWindow()
     InitWindow(0, 0, "Game");
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_UNDECORATED | FLAG_VSYNC_HINT);
     const int display = GetCurrentMonitor();
-    const int targetWidth = GetMonitorWidth(display) * 2 / 3;
-    const int targetHeight = GetMonitorHeight(display) * 2 / 3;
-    SetWindowPosition(targetWidth / 6, targetHeight / 6);
+    const int targetWidth = GetMonitorWidth(display);
+    const int targetHeight = GetMonitorHeight(display);
+    SetWindowPosition(0, 0);
     SetWindowSize(targetWidth, targetHeight);
     SetTargetFPS(GetMonitorRefreshRate(display));
 }
