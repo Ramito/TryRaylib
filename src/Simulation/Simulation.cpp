@@ -477,7 +477,8 @@ void Simulation::Simulate()
                 const float mass2 = collider2.Radius * collider2.Radius * collider2.Radius;
                 const float massNormalizer = 2.f / (mass1 + mass2);
 
-                const Vector3 transferedvelocity = Vector3Scale(gap, projection / distanceSq);
+                const Vector3 transferedvelocity =
+                Vector3Scale(gap, SpaceData::AsteroidBounce * projection / distanceSq);
                 velocity1 = Vector3Add(velocity1, Vector3Scale(transferedvelocity, mass2 * massNormalizer));
                 velocity2 =
                 Vector3Subtract(velocity2, Vector3Scale(transferedvelocity, mass1 * massNormalizer));

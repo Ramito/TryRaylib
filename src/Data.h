@@ -35,10 +35,11 @@ constexpr Vector3 CameraOffset = {-11.f, 42.f, -11.f};
 } // namespace CameraData
 
 namespace SpaceData {
-constexpr uint32_t AsteroidsCount = 125;
+constexpr uint32_t AsteroidsCount = 100;
 constexpr float MinAsteroidRadius = 1.0f;
-constexpr float MaxAsteroidRadius = 5.0f;
+constexpr float MaxAsteroidRadius = 4.5f;
 constexpr float AsteroidDriftSpeed = 1.25f;
+constexpr float AsteroidBounce = 0.975f;
 constexpr float LengthX = 250.f;
 constexpr float LengthZ = 250.f;
 constexpr int CellCountX = 25;

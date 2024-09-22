@@ -61,40 +61,33 @@ FindFrustumVisiblePosition(const CameraFrustum& frustum, const Vector3& position
 
 void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const Color color)
 {
-    constexpr float Angle = -2.f * PI / 3.f;
-    constexpr float Length = 1.25f;
-    constexpr float Width = 0.65f;
-    constexpr float Height = 0.25f;
+    constexpr float scale = 0.625f;
 
-    Vector3 forward = Vector3RotateByQuaternion(Forward3, orientation);
-    Vector3 left = Vector3RotateByQuaternion(Left3, orientation);
-    Vector3 up = Vector3RotateByQuaternion(Up3, orientation);
+    std::vector<Vector3> vertices = {
+    Vector3{0.f, 0.f, 2.f * scale},             // 0 : nose
+    Vector3{-scale, 0.f, -scale},               // 1 : wingL
+    Vector3{scale, 0.f, -scale},                // 2 : wingR
+    Vector3{0.f, 0.f, 0.f},                     // 3 : center
+    Vector3{0.f, 0.f, -scale},                  // 4 : tail
+    Vector3{0.f, scale * 1.25f, -1.5f * scale}, // 5 : finT
+    Vector3{0.f, -0.5f * scale, -0.7f * scale}, // 6 : finB
+    };
 
-    Vector3 upShift = Vector3Scale(up, Height);
-    Vector3 downShift = Vector3Scale(up, -2.f * Height);
+    const std::vector<std::array<int, 3>> triangles = {{0, 1, 2}, {3, 4, 5}, {0, 4, 6}};
 
-    Quaternion triangleQuat = QuaternionFromAxisAngle(up, Angle);
+    for (Vector3& vertex : vertices) {
+        vertex = Vector3RotateByQuaternion(vertex, orientation);
+    }
 
-    Vector3 vertex1 = Vector3Add(Vector3Scale(forward, Length), position);
+    for (Vector3& vertex : vertices) {
+        vertex = Vector3Add(vertex, position);
+    }
 
-    Vector3 relVertex = Vector3RotateByQuaternion(forward, triangleQuat);
-    Vector3 vertex2 = Vector3Add(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
-
-    relVertex = Vector3RotateByQuaternion(relVertex, triangleQuat);
-    Vector3 vertex3 = Vector3Subtract(Vector3Add(Vector3Scale(relVertex, Width), position), upShift);
-
-    DrawLine3D(vertex1, vertex2, color);
-    DrawLine3D(vertex2, vertex3, color);
-    DrawLine3D(vertex3, vertex1, color);
-    vertex2 = Vector3Add(vertex2, downShift);
-    vertex3 = Vector3Subtract(vertex3, downShift);
-
-    DrawLine3D(vertex1, vertex2, color);
-    DrawLine3D(vertex2, vertex3, color);
-    DrawLine3D(vertex3, vertex1, color);
-
-    Vector3 midBack = Vector3Lerp(vertex2, vertex3, 0.5f);
-    DrawLine3D(vertex1, midBack, color);
+    for (const auto& triangle : triangles) {
+        DrawLine3D(vertices[triangle[0]], vertices[triangle[1]], color);
+        DrawLine3D(vertices[triangle[1]], vertices[triangle[2]], color);
+        DrawLine3D(vertices[triangle[2]], vertices[triangle[0]], color);
+    }
 }
 
 void DrawToCurrentTarget(const RenderList& list)
