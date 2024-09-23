@@ -292,6 +292,9 @@ void Simulation::Simulate()
         }
 
         turnAbility *= steeringSign;
+        if (specialRoll) {
+            turnAbility *= -1.f;
+        }
 
         if (steer > PI) {
             steer = 2.f * PI - steer;
