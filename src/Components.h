@@ -37,6 +37,11 @@ struct VelocityComponent
     Vector3 Velocity;
 };
 
+struct AngularComponent
+{
+    float Momentum;
+};
+
 struct SpaceshipInputComponent
 {
     uint32_t InputId;

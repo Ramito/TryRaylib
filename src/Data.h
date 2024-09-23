@@ -18,7 +18,7 @@ constexpr Vector3 Left3 = {1.f, 0.f, 0.f};
 constexpr Vector3 Up3 = {0.f, 1.f, 0.f};
 
 namespace SimTimeData {
-constexpr uint32_t TargetFPS = 120;
+constexpr uint32_t TargetFPS = 60;
 constexpr float DeltaTime = 1.f / TargetFPS;
 } // namespace SimTimeData
 
@@ -40,6 +40,7 @@ constexpr float MinAsteroidRadius = 1.0f;
 constexpr float MaxAsteroidRadius = 4.5f;
 constexpr float AsteroidDriftSpeed = 1.25f;
 constexpr float AsteroidBounce = 0.975f;
+constexpr float RelativeAsteroidDensity = 7.5f;
 constexpr float LengthX = 250.f;
 constexpr float LengthZ = 250.f;
 constexpr int CellCountX = 25;
@@ -67,6 +68,10 @@ constexpr float SteerM = (0.95f * PI - SteerB) * 0.5f;
 
 constexpr float CollisionRadius = 0.75f;
 constexpr float ParticleCollisionRadius = 1.25f;
+
+constexpr float AngularMomentumTransfer = 0.745f;
+constexpr float AngularMomentumDrag = 0.975f;
+constexpr float LethalImpactSq = 95.f;
 } // namespace SpaceshipData
 
 namespace WeaponData {
