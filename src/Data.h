@@ -40,7 +40,7 @@ constexpr float MinAsteroidRadius = 1.0f;
 constexpr float MaxAsteroidRadius = 4.5f;
 constexpr float AsteroidDriftSpeed = 1.25f;
 constexpr float AsteroidBounce = 0.975f;
-constexpr float RelativeAsteroidDensity = 7.5f;
+constexpr float RelativeAsteroidDensity = 8.f;
 constexpr float LengthX = 250.f;
 constexpr float LengthZ = 250.f;
 constexpr int CellCountX = 25;
@@ -71,7 +71,7 @@ constexpr float ParticleCollisionRadius = 1.25f;
 
 constexpr float AngularMomentumTransfer = 0.745f;
 constexpr float AngularMomentumDrag = 0.975f;
-constexpr float LethalImpactSq = 95.f;
+constexpr float LethalImpactSq = 120.f;
 } // namespace SpaceshipData
 
 namespace WeaponData {
