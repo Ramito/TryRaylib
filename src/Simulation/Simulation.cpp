@@ -242,6 +242,8 @@ void Simulation::Simulate()
         float turnDistance = std::clamp(1.f - turnCos, 0.f, 2.f);
         float targetSteer = SpaceshipData::SteerB + turnDistance * SpaceshipData::SteerM;
 
+        bool specialRoll = false;
+
         float steeringSign = 1.f;
         if (Vector3DotProduct(forward, HorizontalOrthogonal(inputDirection)) < 0.f) {
             steeringSign = -1.f;
@@ -250,7 +252,14 @@ void Simulation::Simulate()
             steer -= SpaceshipData::NegativeRoll * deltaTime;
             steer = std::max(steer, 0.f);
         } else {
-            if (steeringSign != steerSign || steer > targetSteer) {
+            if (steeringSign != steerSign) {
+                if (PI - targetSteer < steer) {
+                    specialRoll = true;
+                    steer += SpaceshipData::SpecialRoll * deltaTime;
+                } else {
+                    steer -= SpaceshipData::NegativeRoll * deltaTime;
+                }
+            } else if (steer > targetSteer) {
                 steer -= SpaceshipData::NegativeRoll * deltaTime;
             } else {
                 steer += SpaceshipData::Roll * deltaTime;
@@ -258,16 +267,23 @@ void Simulation::Simulate()
             }
         }
 
+        float rollMultiplier = specialRoll ? SpaceshipData::SpecialRollPitchMultiplier : 1.f;
+
         float turnAbility = abs(cosf(steer) * SpaceshipData::Yaw);
         float pitchTurnAbility = sinf(steer);
         if (steeringSign == steerSign && pitchTurnAbility >= 0.f) {
-            turnAbility += abs(pitchTurnAbility) * SpaceshipData::Pitch;
+            turnAbility += abs(pitchTurnAbility) * SpaceshipData::Pitch * rollMultiplier;
         } else {
-            turnAbility += abs(pitchTurnAbility) * SpaceshipData::NegativePitch;
+            turnAbility += abs(pitchTurnAbility) * SpaceshipData::NegativePitch * rollMultiplier;
         }
 
-        steer *= steerSign;
         turnAbility *= steeringSign;
+
+        if (steer > PI) {
+            steer = 2.f * PI - steer;
+            steerSign *= -1;
+        }
+        steer *= steerSign;
         steerComponent.Steer = steer;
 
         Quaternion resultingQuaternion;

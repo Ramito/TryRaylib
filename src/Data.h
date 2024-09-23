@@ -47,7 +47,7 @@ constexpr int CellCountZ = 25;
 } // namespace SpaceData
 
 namespace SpaceshipData {
-constexpr float MinThrust = 10.f;
+constexpr float MinThrust = 8.f;
 constexpr float Thrust = 15.f;
 constexpr float LinearDrag = 1e-5;
 constexpr float QuadraticDrag = 1e-3;
@@ -59,8 +59,11 @@ constexpr float Roll = 1.5f;
 constexpr float NegativePitch = 0.5f;
 constexpr float NegativeRoll = 2.75f;
 
+constexpr float SpecialRoll = 1.5f * SpaceshipData::NegativeRoll;
+constexpr float SpecialRollPitchMultiplier = 2.25f;
+
 constexpr float SteerB = 0.225f;
-constexpr float SteerM = 1.45f;
+constexpr float SteerM = (0.95f * PI - SteerB) * 0.5f;
 
 constexpr float CollisionRadius = 0.75f;
 constexpr float ParticleCollisionRadius = 1.25f;

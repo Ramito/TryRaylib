@@ -61,16 +61,16 @@ FindFrustumVisiblePosition(const CameraFrustum& frustum, const Vector3& position
 
 void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const Color color)
 {
-    constexpr float scale = 0.625f;
+    constexpr float scale = 0.65f;
 
     std::vector<Vector3> vertices = {
-    Vector3{0.f, 0.f, 2.f * scale},             // 0 : nose
-    Vector3{-scale, 0.f, -scale},               // 1 : wingL
-    Vector3{scale, 0.f, -scale},                // 2 : wingR
-    Vector3{0.f, 0.f, 0.f},                     // 3 : center
-    Vector3{0.f, 0.f, -scale},                  // 4 : tail
-    Vector3{0.f, scale * 1.25f, -1.5f * scale}, // 5 : finT
-    Vector3{0.f, -0.5f * scale, -0.7f * scale}, // 6 : finB
+    Vector3{0.f, 0.f, 2.f * scale},               // 0 : nose
+    Vector3{-1.25f * scale, 0.f, -scale},         // 1 : wingL
+    Vector3{1.25f * scale, 0.f, -scale},          // 2 : wingR
+    Vector3{0.f, 0.f, 0.f},                       // 3 : center
+    Vector3{0.f, 0.f, -scale},                    // 4 : tail
+    Vector3{0.f, scale * 1.5f, -1.5f * scale},    // 5 : finT
+    Vector3{0.f, -0.75f * scale, -0.75f * scale}, // 6 : finB
     };
 
     const std::vector<std::array<int, 3>> triangles = {{0, 1, 2}, {3, 4, 5}, {0, 4, 6}};
