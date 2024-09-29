@@ -59,6 +59,8 @@ FindFrustumVisiblePosition(const CameraFrustum& frustum, const Vector3& position
     return {};
 }
 
+constexpr Color SpaceColor = {40, 40, 50, 255};
+
 void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const Color color)
 {
     constexpr float scale = 0.65f;
@@ -83,11 +85,31 @@ void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const
         vertex = Vector3Add(vertex, position);
     }
 
+    rlBegin(RL_TRIANGLES);
+    rlColor4ub(SpaceColor.r, SpaceColor.g, SpaceColor.b, SpaceColor.a);
+
     for (const auto& triangle : triangles) {
-        DrawLine3D(vertices[triangle[0]], vertices[triangle[1]], color);
-        DrawLine3D(vertices[triangle[1]], vertices[triangle[2]], color);
-        DrawLine3D(vertices[triangle[2]], vertices[triangle[0]], color);
+        rlVertex3f(vertices[triangle[0]].x, vertices[triangle[0]].y, vertices[triangle[0]].z);
+        rlVertex3f(vertices[triangle[1]].x, vertices[triangle[1]].y, vertices[triangle[1]].z);
+        rlVertex3f(vertices[triangle[2]].x, vertices[triangle[2]].y, vertices[triangle[2]].z);
+
+        rlVertex3f(vertices[triangle[2]].x, vertices[triangle[2]].y, vertices[triangle[2]].z);
+        rlVertex3f(vertices[triangle[1]].x, vertices[triangle[1]].y, vertices[triangle[1]].z);
+        rlVertex3f(vertices[triangle[0]].x, vertices[triangle[0]].y, vertices[triangle[0]].z);
     }
+    rlEnd();
+
+    rlBegin(RL_LINES);
+    rlColor4ub(color.r, color.g, color.b, color.a);
+    for (const auto& triangle : triangles) {
+        rlVertex3f(vertices[triangle[0]].x, vertices[triangle[0]].y, vertices[triangle[0]].z);
+        rlVertex3f(vertices[triangle[1]].x, vertices[triangle[1]].y, vertices[triangle[1]].z);
+        rlVertex3f(vertices[triangle[1]].x, vertices[triangle[1]].y, vertices[triangle[1]].z);
+        rlVertex3f(vertices[triangle[2]].x, vertices[triangle[2]].y, vertices[triangle[2]].z);
+        rlVertex3f(vertices[triangle[2]].x, vertices[triangle[2]].y, vertices[triangle[2]].z);
+        rlVertex3f(vertices[triangle[0]].x, vertices[triangle[0]].y, vertices[triangle[0]].z);
+    }
+    rlEnd();
 }
 
 void DrawToCurrentTarget(const RenderList& list)
@@ -105,7 +127,8 @@ void DrawToCurrentTarget(const RenderList& list)
     }
 
     for (const auto& [position, radius] : list.Asteroids) {
-        DrawSphereWires(position, radius, 8, 8, RAYWHITE);
+        DrawSphereEx(position, radius, 5, 6, SpaceColor);
+        DrawSphereWires(position, radius, 5, 6, YELLOW);
     }
 
     for (const auto& [position, color] : list.Particles) {
@@ -191,7 +214,7 @@ void RenderView(const Rectangle& viewPort,
     Rectangle target = {0, 0, viewPort.width, -viewPort.height};
 
     BeginTextureMode(viewTexture);
-    ClearBackground({40, 40, 50, 255});
+    ClearBackground(SpaceColor);
     DrawTextureRec(backgroundTexture.texture, target, Vector2Zero(), GRAY);
     BeginMode3D(payload.MainCamera);
     DrawToCurrentTarget(payload.MainList);
