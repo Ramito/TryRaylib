@@ -44,6 +44,7 @@ void Menu::DrawMenu()
         GuiFade(mAlpha);
         if (mAlpha == 0.f) {
             GuiDisable();
+            return;
         }
     }
     float width = GetScreenWidth();
