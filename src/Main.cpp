@@ -183,19 +183,21 @@ int main()
     while (!WindowShouldClose()) {
         ZoneScopedN("Main Loop");
         menu.UpdateMenu(startGameAction);
-        if (!renderReadySnapshots.empty()) {
-            simSnapShots[renderSnapshot].clear();
-            {
-                ZoneScoped("GetSimFrame");
-                std::scoped_lock lock(transferMutex);
-                writeReadySnapshots.push(renderSnapshot);
-                renderSnapshot = renderReadySnapshots.front();
-                renderReadySnapshots.pop();
-            }
-            UpdateCameras(simSnapShots[renderSnapshot], *gameCameras);
-            render->DrawScreenTexture(simSnapShots[renderSnapshot]);
+
+        if (renderReadySnapshots.empty()) {
+            continue;
         }
 
+        simSnapShots[renderSnapshot].clear();
+        {
+            ZoneScoped("GetSimFrame");
+            std::scoped_lock lock(transferMutex);
+            writeReadySnapshots.push(renderSnapshot);
+            renderSnapshot = renderReadySnapshots.front();
+            renderReadySnapshots.pop();
+        }
+        UpdateCameras(simSnapShots[renderSnapshot], *gameCameras);
+        render->DrawScreenTexture(simSnapShots[renderSnapshot]);
 
         BeginDrawing();
         DrawTextureRec(render->ScreenTexture(),
