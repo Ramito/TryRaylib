@@ -39,7 +39,13 @@ struct VelocityComponent
 
 struct AngularComponent
 {
-    float Momentum;
+    float YawMomentum;
+};
+
+struct SpecialManeuver
+{
+    float SideProgress;
+    float SideMomentum;
 };
 
 struct SpaceshipInputComponent

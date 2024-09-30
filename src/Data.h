@@ -9,6 +9,8 @@ struct GameInput
 {
     float Forward; // Direction is camera relative
     float Left;
+    float SecondaryForward;
+    float SecondaryLeft;
     bool Fire;
 };
 

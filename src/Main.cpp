@@ -42,9 +42,14 @@ void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInp
 
         bool fire = false;
         Vector2 input = {0.f, 0.f};
+        Vector2 secondaryInput = {0.f, 0.f};
         if (IsGamepadAvailable(idx)) {
-            input.x = GetGamepadAxisMovement(idx, 0);
-            input.y = -GetGamepadAxisMovement(idx, 1);
+            input.x = GetGamepadAxisMovement(idx, GAMEPAD_AXIS_LEFT_X);
+            input.y = -GetGamepadAxisMovement(idx, GAMEPAD_AXIS_LEFT_Y);
+
+            secondaryInput.x = GetGamepadAxisMovement(idx, GAMEPAD_AXIS_RIGHT_X);
+            secondaryInput.y = -GetGamepadAxisMovement(idx, GAMEPAD_AXIS_RIGHT_Y);
+
             fire = IsGamepadButtonDown(idx, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
         } else if (idx == 0) {
             if (IsKeyDown(KEY_A)) {
@@ -66,10 +71,17 @@ void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInp
             input = Vector2Normalize(input);
         }
 
+        if (Vector2LengthSqr(secondaryInput) > 1.f) {
+            secondaryInput = Vector2Normalize(secondaryInput);
+        }
+
         float forward = Vector2DotProduct(input, normalizedTo);
         float left = Vector2DotProduct(input, normalizedOrthogonal);
 
-        gameInput = {forward, left, fire};
+        float secondaryForward = Vector2DotProduct(secondaryInput, normalizedTo);
+        float secondaryLeft = Vector2DotProduct(secondaryInput, normalizedOrthogonal);
+
+        gameInput = {forward, left, secondaryForward, secondaryLeft, fire};
     }
 }
 

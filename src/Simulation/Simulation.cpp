@@ -200,12 +200,12 @@ void Simulation::Simulate()
     auto angularView = mRegistry.view<AngularComponent, OrientationComponent>();
     auto angularProcess = [](entt::entity entity, AngularComponent& angularComponent,
                              OrientationComponent& orientationComponent) {
-        if (FloatEquals(angularComponent.Momentum, 0.f)) {
+        if (FloatEquals(angularComponent.YawMomentum, 0.f)) {
             return;
         }
-        Quaternion turningQuaternion = QuaternionFromAxisAngle(Up3, angularComponent.Momentum * deltaTime);
-        orientationComponent.Rotation = QuaternionMultiply(turningQuaternion, orientationComponent.Rotation);
-        angularComponent.Momentum *= SpaceshipData::AngularMomentumDrag;
+        Quaternion yawQuaternion = QuaternionFromAxisAngle(Up3, angularComponent.YawMomentum * deltaTime);
+        orientationComponent.Rotation = QuaternionMultiply(yawQuaternion, orientationComponent.Rotation);
+        angularComponent.YawMomentum *= SpaceshipData::AngularMomentumDrag;
     };
     angularView.each(angularProcess);
 
@@ -234,6 +234,40 @@ void Simulation::Simulate()
         thrustComponent.Thrust = thrust;
 
         Vector3 acceleration = Vector3Scale(forward, deltaTime * thrustComponent.Thrust);
+
+        Vector3 secondaryInputTarget = {input.SecondaryLeft, 0.f, input.SecondaryForward};
+        float extraRoll = 0.f;
+        auto* maneuver = mRegistry.try_get<SpecialManeuver>(entity);
+        if (!Vector3Equals(secondaryInputTarget, Vector3Zero())) {
+            Vector3 horizontalLeft = HorizontalOrthogonal(forward);
+            float secondarySideThrust = Vector3DotProduct(horizontalLeft, secondaryInputTarget);
+            acceleration =
+            Vector3Add(acceleration, Vector3Scale(horizontalLeft, deltaTime * secondarySideThrust * 30.f));
+            if (maneuver == nullptr) {
+                maneuver = &mRegistry.emplace<SpecialManeuver>(entity);
+            }
+            maneuver->SideMomentum = secondarySideThrust * 10.f;
+            maneuver->SideProgress += deltaTime * maneuver->SideMomentum;
+            while (maneuver->SideProgress > PI) {
+                maneuver->SideProgress -= 2.f * PI;
+            }
+            while (maneuver->SideProgress < -PI) {
+                maneuver->SideProgress += 2.f * PI;
+            }
+            extraRoll = maneuver->SideProgress;
+        } else if (maneuver != nullptr) {
+            maneuver->SideMomentum *= SpaceshipData::AngularMomentumDrag;
+            maneuver->SideProgress *= SpaceshipData::AngularMomentumDrag;
+            if (!FloatEquals(maneuver->SideMomentum, 0.f)) {
+                maneuver->SideProgress += deltaTime * maneuver->SideMomentum;
+                extraRoll = maneuver->SideProgress;
+            } else {
+                steerComponent.Steer += maneuver->SideProgress;
+                mRegistry.erase<SpecialManeuver>(entity);
+                maneuver = nullptr;
+            }
+        }
+
         Vector3 velocity = Vector3Add(velocityComponent.Velocity, acceleration);
 
         float speed = Vector3Length(velocity);
@@ -303,14 +337,16 @@ void Simulation::Simulate()
         steer *= steerSign;
         steerComponent.Steer = steer;
 
+        float rollAngle = -steer + extraRoll;
+
         Quaternion resultingQuaternion;
         if (turn) {
-            Quaternion rollQuaternion = QuaternionFromAxisAngle(Forward3, -steer);
+            Quaternion rollQuaternion = QuaternionFromAxisAngle(Forward3, rollAngle);
 
             float dot = Vector3DotProduct(Forward3, forward);
             Quaternion yawQuaternion;
             if (FloatEquals(dot, -1.f)) {
-                yawQuaternion = yawQuaternion = QuaternionFromAxisAngle(Up3, PI);
+                yawQuaternion = QuaternionFromAxisAngle(Up3, PI);
             } else {
                 yawQuaternion = QuaternionFromVector3ToVector3(Forward3, forward);
             }
@@ -320,7 +356,7 @@ void Simulation::Simulate()
             resultingQuaternion = QuaternionMultiply(yawQuaternion, rollQuaternion);
             resultingQuaternion = QuaternionMultiply(turningQuaternion, resultingQuaternion);
         } else {
-            Quaternion rollQuaternion = QuaternionFromAxisAngle(Forward3, -steer);
+            Quaternion rollQuaternion = QuaternionFromAxisAngle(Forward3, rollAngle);
 
             float dot = Vector3DotProduct(Forward3, inputDirection);
             Quaternion yawQuaternion;
@@ -529,7 +565,7 @@ void Simulation::Simulate()
                     if (orthogonal < 0.f) {
                         angular = -angular;
                     }
-                    mRegistry.get<AngularComponent>(collider1.Entity).Momentum -= angular;
+                    mRegistry.get<AngularComponent>(collider1.Entity).YawMomentum -= angular;
                 }
             }
             if (isSpaceship2) {
@@ -542,7 +578,7 @@ void Simulation::Simulate()
                     if (orthogonal < 0.f) {
                         angular = -angular;
                     }
-                    mRegistry.get<AngularComponent>(collider2.Entity).Momentum -= angular;
+                    mRegistry.get<AngularComponent>(collider2.Entity).YawMomentum -= angular;
                 }
             }
         };
