@@ -140,11 +140,11 @@ void DrawBulletsToCurrentTarget(const Camera& camera, const Texture& glow, const
 {
     rlDisableDepthMask();
 
+    const Rectangle source = {0.0f, 0.0f, (float)glow.width, (float)glow.height};
+    const Vector2 size = {2.25f, 2.25f};
+    const Vector3 up = Vector3Normalize({1.f, 1.f, 1.f});
     for (const auto& [position, color] : list.Bullets) {
-        Vector3 up = Vector3Normalize({1.f, 0.f, 1.f});
-        Rectangle source = {0.0f, 0.0f, (float)glow.width, (float)glow.height};
-        Vector2 size = {2.25f, 2.25f};
-        DrawBillboardPro(camera, glow, source, position, up, size, {}, 0.f, color);
+        DrawBillboardPro(camera, glow, source, position, up, size, Vector2Scale(size, 0.5f), 0.f, color);
     }
 
     for (const auto& [position, radius, relativeRadius] : list.Explosions) {
@@ -359,7 +359,6 @@ void Render::DrawScreenTexture(const entt::registry& registry)
     if (mViews > 1) {
         DrawLine(mViewPorts[1].x, mViewPorts[1].y, mViewPorts[1].x, mViewPorts[1].height, WHITE);
     }
-    DrawFPS(10, 10);
     EndTextureMode();
 }
 
