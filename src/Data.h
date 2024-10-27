@@ -80,8 +80,8 @@ namespace WeaponData {
 constexpr float RateOfFire = 0.1f;
 constexpr float BulletSpeed = 70.5f;
 constexpr float BulletLifetime = 0.5f;
-constexpr std::array<Vector3, 4> ShootBones = {Vector3{0.6f, 0.25f, 0.f}, Vector3{-0.6f, 0.25f, 0.f},
-                                               Vector3{0.6f, -0.25f, 0.f}, Vector3{-0.6f, -0.25f, 0.f}};
+constexpr std::array<Vector3, 3> ShootBones = {Vector3{0.6f, -0.05f, 0.f}, Vector3{-0.6f, -0.05f, 0.f},
+                                               Vector3{0.f, -0.05f, 0.75f}};
 } // namespace WeaponData
 
 namespace ParticleData {

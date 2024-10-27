@@ -50,7 +50,7 @@ void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInp
             secondaryInput.x = GetGamepadAxisMovement(idx, GAMEPAD_AXIS_RIGHT_X);
             secondaryInput.y = -GetGamepadAxisMovement(idx, GAMEPAD_AXIS_RIGHT_Y);
 
-            fire = IsGamepadButtonDown(idx, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
+            fire = IsGamepadButtonDown(idx, GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
         } else if (idx == 0) {
             if (IsKeyDown(KEY_A)) {
                 input.x -= 1.f;
