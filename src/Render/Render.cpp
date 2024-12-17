@@ -182,7 +182,7 @@ void RenderBackground(RenderTexture& backgroundTexture,
     BeginTextureMode(bulletTexture);
     ClearBackground(BLANK);
     BeginMode3D(payload.BackgroundCamera);
-    DrawBulletsToCurrentTarget(payload.MainCamera, glow, payload.BackgroundList);
+    DrawBulletsToCurrentTarget(payload.BackgroundCamera, glow, payload.BackgroundList);
     EndBlendMode();
     EndMode3D();
     EndTextureMode();

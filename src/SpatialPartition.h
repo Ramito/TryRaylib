@@ -24,7 +24,7 @@ public:
         mPackedCells.clear();
         //-------mSparseCells stays put
         mCellCounts.clear();
-        mCellFirst.clear();
+        mCellLookup.clear();
         mPartition.clear();
         mInsertionAreas.clear();
     }
@@ -48,9 +48,10 @@ public:
                 cellIndex = mPackedCells.size();
                 mSparseCells[cellIt] = cellIndex;
                 mPackedCells.push_back(cellIt);
-                mCellCounts.push_back(0);
+                mCellCounts.push_back(1);
+            } else {
+                mCellCounts[cellIndex]++;
             }
-            mCellCounts[cellIndex]++;
             return false;
         };
         for (const Area& area : mInsertionAreas) {
@@ -58,25 +59,24 @@ public:
         }
 
         // Determine first index for each cell
-        mCellFirst.resize(mCellCounts.size());
+        mCellLookup.resize(mCellCounts.size());
         uint32_t firstAcc = 0;
-        auto firstIt = mCellFirst.begin();
+        auto firstIt = mCellLookup.begin();
         for (const uint32_t count : mCellCounts) {
-            *firstIt = firstAcc;
+            *firstIt = {firstAcc, count};
             ++firstIt;
             firstAcc += count;
         }
 
         mPartition.resize(firstAcc);
-        // reset counts to 0 so we can insert again
-        mCellCounts.assign(mPackedCells.size(), 0);
 
         uint32_t payloadId = 0;
         for (const Area& area : mInsertionAreas) {
             auto insertAction = [this, payloadId](uint32_t cellIt) {
                 const uint32_t cellIndex = mSparseCells[cellIt];
-                const uint32_t insertIndex = mCellFirst[cellIndex] + mCellCounts[cellIndex];
-                mCellCounts[cellIndex] += 1;
+                const uint32_t insertIndex =
+                mCellLookup[cellIndex].First + mCellLookup[cellIndex].Count - mCellCounts[cellIndex];
+                mCellCounts[cellIndex] -= 1;
                 mPartition[insertIndex] = payloadId;
                 return false;
             };
@@ -91,14 +91,13 @@ public:
         mPairAccumulator.clear();
         mPairAppend.clear();
         for (size_t cellIndex = 0; cellIndex < mPackedCells.size(); ++cellIndex) {
-            const uint32_t cellFirst = mCellFirst[cellIndex];
-            const uint32_t cellCount = mCellCounts[cellIndex];
+            const CellLookup cellLookup = mCellLookup[cellIndex];
             const size_t accumulatorSize = mPairAccumulator.size();
             size_t minBound = accumulatorSize;
-            for (size_t firstIt = 0; firstIt < cellCount - 1; ++firstIt) {
-                const uint32_t firstItem = mPartition[cellFirst + firstIt];
-                for (size_t secondIt = firstIt + 1; secondIt < cellCount; ++secondIt) {
-                    const uint32_t secondItem = mPartition[cellFirst + secondIt];
+            for (size_t firstIt = 0; firstIt < cellLookup.Count - 1; ++firstIt) {
+                const uint32_t firstItem = mPartition[cellLookup.First + firstIt];
+                for (size_t secondIt = firstIt + 1; secondIt < cellLookup.Count; ++secondIt) {
+                    const uint32_t secondItem = mPartition[cellLookup.First + secondIt];
                     IndexPair pair = {firstItem, secondItem};
                     auto lower = std::lower_bound(mPairAccumulator.begin(), mPairAccumulator.begin() + accumulatorSize,
                                                   pair, PairCompare{});
@@ -146,9 +145,8 @@ public:
             if (!cellExists) {
                 return false;
             }
-            const uint32_t cellFirst = mCellFirst[cellIndex];
-            const uint32_t cellCount = mCellCounts[cellIndex];
-            for (uint32_t it = cellFirst; it < cellFirst + cellCount; ++it) {
+            const CellLookup lookup = mCellLookup[cellIndex];
+            for (uint32_t it = lookup.First; it < lookup.First + lookup.Count; ++it) {
                 const uint32_t itemIndex = mPartition[it];
                 const uint32_t packedIndex = mNearbySparse[itemIndex];
                 bool alreadyIterated =
@@ -232,11 +230,17 @@ private:
     int CountX;
     int CountY;
 
+    struct CellLookup
+    {
+        uint32_t First;
+        uint32_t Count;
+    };
+
     std::vector<TPayload> mPayloads;
     std::vector<uint32_t> mPackedCells;
     std::vector<uint32_t> mSparseCells;
-    std::vector<uint32_t> mCellCounts;
-    std::vector<uint32_t> mCellFirst;
+    std::vector<uint32_t> mCellCounts; // Use only for baking
+    std::vector<CellLookup> mCellLookup;
     std::vector<uint32_t> mPartition;
     std::vector<Area> mInsertionAreas;
 
