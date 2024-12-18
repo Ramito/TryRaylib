@@ -114,6 +114,7 @@ void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const
 
 void DrawToCurrentTarget(const RenderList& list)
 {
+    ZoneScoped;
     constexpr std::array<Color, 2> PlayerColors = {RED, BLUE};
 
     for (const auto& [position, orientation, inputID] : list.Spaceships) {
@@ -138,6 +139,7 @@ void DrawToCurrentTarget(const RenderList& list)
 
 void DrawBulletsToCurrentTarget(const Camera& camera, const Texture& glow, const RenderList& list)
 {
+    ZoneScoped;
     rlDisableDepthMask();
 
     const Rectangle source = {0.0f, 0.0f, (float)glow.width, (float)glow.height};
@@ -182,6 +184,7 @@ void RenderBackground(RenderTexture& backgroundTexture,
     BeginTextureMode(bulletTexture);
     ClearBackground(BLANK);
     BeginMode3D(payload.BackgroundCamera);
+    BeginBlendMode(BLEND_ALPHA);
     DrawBulletsToCurrentTarget(payload.BackgroundCamera, glow, payload.BackgroundList);
     EndBlendMode();
     EndMode3D();
