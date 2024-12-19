@@ -112,10 +112,10 @@ void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const
     rlEnd();
 }
 
-void DrawToCurrentTarget(const RenderList& list)
+void DrawToCurrentTarget(const RenderList& list, Color tint)
 {
     ZoneScoped;
-    constexpr std::array<Color, 2> PlayerColors = {RED, BLUE};
+    const std::array<Color, 2> PlayerColors = {ColorTint(RED, tint), ColorTint(BLUE, tint)};
 
     for (const auto& [position, orientation, inputID] : list.Spaceships) {
         DrawSpaceShip(position, orientation, PlayerColors[inputID]);
@@ -128,23 +128,27 @@ void DrawToCurrentTarget(const RenderList& list)
     }
 
     for (const auto& [position, radius] : list.Asteroids) {
-        DrawSphereEx(position, radius, 5, 6, SpaceColor);
-        DrawSphereWires(position, radius, 5, 6, YELLOW);
+        DrawSphereEx(position, radius, 5, 6, ColorTint(SpaceColor, tint));
+        DrawSphereWires(position, radius, 5, 6, ColorTint(YELLOW, tint));
     }
 
     for (const auto& [position, color] : list.Particles) {
-        DrawPoint3D(position, color);
+        DrawPoint3D(position, ColorTint(color, tint));
     }
 }
 
 void DrawBulletsToCurrentTarget(const Camera& camera, const Texture& glow, const RenderList& list)
 {
     ZoneScoped;
-    rlDisableDepthMask();
+
+    BeginBlendMode(BLEND_ADDITIVE);
 
     const Rectangle source = {0.0f, 0.0f, (float)glow.width, (float)glow.height};
-    const Vector2 size = {2.25f, 2.25f};
-    const Vector3 up = Vector3Normalize({1.f, 1.f, 1.f});
+    const Vector2 size = {1.5f, 1.5f};
+
+    const Vector3 toTarget = Vector3Subtract(camera.target, camera.position);
+    const Vector3 up = camera.up;
+
     for (const auto& [position, color] : list.Bullets) {
         DrawBillboardPro(camera, glow, source, position, up, size, Vector2Scale(size, 0.5f), 0.f, color);
     }
@@ -155,7 +159,7 @@ void DrawBulletsToCurrentTarget(const Camera& camera, const Texture& glow, const
         DrawSphere(position, radius, color);
     }
 
-    rlEnableDepthMask();
+    EndBlendMode();
 }
 
 Camera MakeBackgroundCamera(const Camera& camera)
@@ -174,59 +178,6 @@ Camera MakeBackgroundCamera(const Camera& camera)
     Vector3Add(backgroundCamera.target, Vector3Scale(CameraData::CameraOffset, 1.75f));
     return backgroundCamera;
 }
-
-void RenderBackground(RenderTexture& backgroundTexture,
-                      RenderTexture& bulletTexture,
-                      const RenderPayload& payload,
-                      const Texture& glow)
-{
-    ZoneScoped;
-    BeginTextureMode(bulletTexture);
-    ClearBackground(BLANK);
-    BeginMode3D(payload.BackgroundCamera);
-    BeginBlendMode(BLEND_ALPHA);
-    DrawBulletsToCurrentTarget(payload.BackgroundCamera, glow, payload.BackgroundList);
-    EndBlendMode();
-    EndMode3D();
-    EndTextureMode();
-
-    BeginTextureMode(backgroundTexture);
-    ClearBackground(BLANK);
-    BeginMode3D(payload.BackgroundCamera);
-    DrawToCurrentTarget(payload.BackgroundList);
-    EndMode3D();
-    EndTextureMode();
-}
-
-void RenderView(const Rectangle& viewPort,
-                RenderTexture& viewTexture,
-                RenderTexture& backgroundTexture,
-                RenderTexture& bulletTexture,
-                const RenderPayload& payload,
-                const Texture& glow)
-{
-    ZoneScoped;
-    BeginTextureMode(bulletTexture);
-    BeginMode3D(payload.MainCamera);
-    BeginBlendMode(BLEND_ALPHA);
-    DrawBulletsToCurrentTarget(payload.MainCamera, glow, payload.MainList);
-    EndBlendMode();
-    EndMode3D();
-    EndTextureMode();
-
-    Rectangle target = {0, 0, viewPort.width, -viewPort.height};
-
-    BeginTextureMode(viewTexture);
-    ClearBackground(SpaceColor);
-    DrawTextureRec(backgroundTexture.texture, target, Vector2Zero(), GRAY);
-    BeginMode3D(payload.MainCamera);
-    DrawToCurrentTarget(payload.MainList);
-    EndMode3D();
-    BeginBlendMode(BLEND_ADDITIVE);
-    DrawTextureRec(bulletTexture.texture, target, Vector2Zero(), WHITE);
-    EndBlendMode();
-    EndTextureMode();
-}
 } // namespace
 
 Render::Render(uint32_t views, RenderDependencies& dependencies)
@@ -244,8 +195,6 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
     for (size_t i = 0; i < mViewPorts.size(); ++i) {
         int width = mViewPorts[i].width;
         int height = mViewPorts[i].height;
-        mBackgroundTextures[i] = LoadRenderTexture(width, height);
-        mBulletTextures[i] = LoadRenderTexture(width, height);
         mViewPortTextures[i] = LoadRenderTexture(width, height);
     }
 
@@ -259,8 +208,6 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
 Render::~Render()
 {
     for (size_t i = 0; i < mViewPorts.size(); ++i) {
-        UnloadRenderTexture(mBackgroundTextures[i]);
-        UnloadRenderTexture(mBulletTextures[i]);
         UnloadRenderTexture(mViewPortTextures[i]);
     }
     UnloadRenderTexture(mScreenTexture);
@@ -339,18 +286,33 @@ void Render::DrawScreenTexture(const entt::registry& registry)
     mThreadPool.PushTasks(mRenderTasks.begin(), mRenderTasks.end());
 
     for (size_t i = 0; i < mViews; ++i) {
+        const auto& viewPort = mViewPorts[i];
+        const auto& payload = mRenderPayloads[i];
+
+        BeginTextureMode(mViewPortTextures[i]);
+        ClearBackground(SpaceColor);
+
+        BeginMode3D(payload.BackgroundCamera);
+
         while (mRenderPayloads[i].BackgroundList.BakeProgress < RenderList::MaxBakeProgress) {
             mThreadPool.TryHelpOneTask();
         }
-        RenderBackground(mBackgroundTextures[i], mBulletTextures[i], mRenderPayloads[i], mGlowTexture);
-    }
 
-    for (size_t i = 0; i < mViews; ++i) {
+        DrawToCurrentTarget(payload.BackgroundList, {150, 150, 150, 200});
+        DrawBulletsToCurrentTarget(payload.BackgroundCamera, mGlowTexture, payload.BackgroundList);
+        EndMode3D();
+
+        BeginMode3D(payload.MainCamera);
+
         while (mRenderPayloads[i].MainList.BakeProgress < RenderList::MaxBakeProgress) {
             mThreadPool.TryHelpOneTask();
         }
-        RenderView(mViewPorts[i], mViewPortTextures[i], mBackgroundTextures[i], mBulletTextures[i],
-                   mRenderPayloads[i], mGlowTexture);
+
+        DrawToCurrentTarget(payload.MainList, WHITE);
+        DrawBulletsToCurrentTarget(payload.MainCamera, mGlowTexture, payload.MainList);
+        EndMode3D();
+
+        EndTextureMode();
     }
 
     BeginTextureMode(mScreenTexture);

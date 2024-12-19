@@ -87,8 +87,6 @@ private:
     uint32_t mViews;
     std::array<Camera, MaxViews>& mCameras;
     std::array<Rectangle, MaxViews>& mViewPorts;
-    std::array<RenderTexture, MaxViews> mBackgroundTextures;
-    std::array<RenderTexture, MaxViews> mBulletTextures;
     std::array<RenderTexture, MaxViews> mViewPortTextures;
     RenderTexture mScreenTexture;
 

@@ -34,11 +34,11 @@ void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInp
         GameInput& gameInput = gameInputs[idx];
         const Camera& camera = cameras[idx];
 
-        Vector2 pos = {camera.position.x, camera.position.z};
-        Vector2 tar = {camera.target.x, camera.target.z};
-        Vector2 to = Vector2Subtract(tar, pos);
-        Vector2 normalizedTo = Vector2Normalize(to);
-        Vector2 normalizedOrthogonal = {-normalizedTo.y, normalizedTo.x};
+        const Vector2 pos = {camera.position.x, camera.position.z};
+        const Vector2 tar = {camera.target.x, camera.target.z};
+        const Vector2 to = Vector2Subtract(tar, pos);
+        const Vector2 normalizedTo = Vector2Normalize(to);
+        const Vector2 normalizedOrthogonal = {-normalizedTo.y, normalizedTo.x};
 
         bool fire = false;
         Vector2 input = {0.f, 0.f};
@@ -92,6 +92,13 @@ static void SetViewports(size_t count, ViewPorts& viewPorts)
                     (float)GetScreenHeight()};
 }
 
+static void SetCameraUp(Camera& camera)
+{
+    const Vector3 toTarget = Vector3Subtract(camera.target, camera.position);
+    camera.up =
+    Vector3Normalize(Vector3CrossProduct(Vector3CrossProduct(toTarget, {0.f, 1.f, 0.f}), toTarget));
+}
+
 static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras)
 {
     ZoneScopedN("Update Cameras");
@@ -111,6 +118,10 @@ static void UpdateCameras(entt::registry& registry, GameCameras& gameCameras)
         const Vector3 target = Vector3Add(position.Position, CameraData::TargetOffset);
         gameCameras[respawn.InputId].target = target;
         gameCameras[respawn.InputId].position = Vector3Add(target, CameraData::CameraOffset);
+    }
+
+    for (Camera& camera : gameCameras) {
+        SetCameraUp(camera);
     }
 }
 
