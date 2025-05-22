@@ -9,10 +9,8 @@
 #include <rlgl.h>
 
 namespace {
-
-CameraFrustum ComputeFrustum(const Camera& camera, const Rectangle& viewPort)
+CameraRays ComputeRays(const Camera& camera, const Rectangle& viewPort)
 {
-
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
 
@@ -21,10 +19,22 @@ CameraFrustum ComputeFrustum(const Camera& camera, const Rectangle& viewPort)
     float maxX = minX + viewPort.width;
     float maxY = minY + viewPort.height;
 
+    // TODO: Ray positions are redundant!
+
     Ray minMinRay = GetMouseRay(Vector2{minX, minY}, camera);
     Ray minMaxRay = GetMouseRay(Vector2{minX, maxY}, camera);
     Ray maxMaxRay = GetMouseRay(Vector2{maxX, maxY}, camera);
     Ray maxMinRay = GetMouseRay(Vector2{maxX, minY}, camera);
+
+    return {minMinRay, minMaxRay, maxMaxRay, maxMinRay};
+}
+
+CameraFrustum ComputeFrustum(const Camera& camera, const CameraRays& cameraRays)
+{
+    const Ray& minMinRay = cameraRays[0];
+    const Ray& minMaxRay = cameraRays[1];
+    const Ray& maxMaxRay = cameraRays[2];
+    const Ray& maxMinRay = cameraRays[3];
 
     Vector3 anchor = camera.position;
     Vector3 topNormal = Vector3Normalize(Vector3CrossProduct(maxMinRay.direction, minMinRay.direction));
@@ -39,24 +49,6 @@ CameraFrustum ComputeFrustum(const Camera& camera, const Rectangle& viewPort)
 
     return {camera.target, topAnchor,    topNormal,   leftAnchor, leftNormal,
             bottomAnchor,  bottomNormal, rightAnchor, rightNormal};
-}
-
-inline std::optional<Vector3>
-FindFrustumVisiblePosition(const CameraFrustum& frustum, const Vector3& position, float radius)
-{
-    const Vector3 renderPosition =
-    Vector3Add(SpaceUtil::FindVectorGap(frustum.Target, position), frustum.Target);
-
-    float topSupport = Vector3DotProduct(frustum.TopNormal, renderPosition) - radius;
-    float leftSupport = Vector3DotProduct(frustum.LeftNormal, renderPosition) - radius;
-    float bottomSupport = Vector3DotProduct(frustum.BottomNormal, renderPosition) - radius;
-    float rightSupport = Vector3DotProduct(frustum.RightNormal, renderPosition) - radius;
-
-    if (topSupport <= frustum.TopSupport && leftSupport <= frustum.LeftSupport &&
-        bottomSupport <= frustum.BottomSupport && rightSupport <= frustum.RightSupport) {
-        return renderPosition;
-    }
-    return {};
 }
 
 constexpr Color SpaceColor = {40, 40, 50, 255};
@@ -112,32 +104,36 @@ void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const
     rlEnd();
 }
 
-void DrawToCurrentTarget(const RenderList& list, Color tint)
+const std::array<Color, 2> PlayerColors = {RED, BLUE};
+
+void DrawRespawns(const RenderLists& lists)
 {
     ZoneScoped;
-    const std::array<Color, 2> PlayerColors = {ColorTint(RED, tint), ColorTint(BLUE, tint)};
-
-    for (const auto& [position, orientation, inputID] : list.Spaceships) {
-        DrawSpaceShip(position, orientation, PlayerColors[inputID]);
-    }
-
-    for (const auto& [position, inputID] : list.Respawners) {
+    for (const auto& [position, inputID] : lists.Respawners) {
         DrawCircle3D(position,
                      RespawnData::MarkerRadius * 0.5f * (1.f + sin(GetTime() * RespawnData::MarkerFrequency)),
                      Left3, 90.f, PlayerColors[inputID]);
     }
+}
 
-    for (const auto& [position, radius] : list.Asteroids) {
-        DrawSphereEx(position, radius, 5, 6, ColorTint(SpaceColor, tint));
-        DrawSphereWires(position, radius, 5, 6, ColorTint(YELLOW, tint));
-    }
-
-    for (const auto& [position, color] : list.Particles) {
-        DrawPoint3D(position, ColorTint(color, tint));
+void DrawSpaceships(const RenderLists& lists)
+{
+    ZoneScoped;
+    for (const auto& [position, orientation, inputID] : lists.Spaceships) {
+        DrawSpaceShip(position, orientation, PlayerColors[inputID]);
     }
 }
 
-void DrawBulletsToCurrentTarget(const Camera& camera, const Texture& glow, const RenderList& list)
+void DrawExplosions(const RenderLists& lists)
+{
+    for (const auto& [position, radius, relativeRadius] : lists.Explosions) {
+        const unsigned char alpha = static_cast<unsigned char>(rintf(cbrt(1.f - relativeRadius) * 255));
+        Color color = {255, 255, 255, alpha};
+        DrawSphere(position, radius, color);
+    }
+}
+
+void DrawBullets(const Camera& camera, const Texture& glow, const RenderLists& lists)
 {
     ZoneScoped;
 
@@ -149,34 +145,36 @@ void DrawBulletsToCurrentTarget(const Camera& camera, const Texture& glow, const
     const Vector3 toTarget = Vector3Subtract(camera.target, camera.position);
     const Vector3 up = camera.up;
 
-    for (const auto& [position, color] : list.Bullets) {
+    for (const auto& [position, color] : lists.Bullets) {
         DrawBillboardPro(camera, glow, source, position, up, size, Vector2Scale(size, 0.5f), 0.f, color);
-    }
-
-    for (const auto& [position, radius, relativeRadius] : list.Explosions) {
-        const unsigned char alpha = static_cast<unsigned char>(rintf(cbrt(1.f - relativeRadius) * 255));
-        Color color = {255, 255, 255, alpha};
-        DrawSphere(position, radius, color);
     }
 
     EndBlendMode();
 }
 
-Camera MakeBackgroundCamera(const Camera& camera)
+void DrawAsteroids(const RenderLists& lists)
 {
-    Camera backgroundCamera = camera;
-    float targetX = camera.target.x + SpaceData::LengthX * 0.5f;
-    float targetZ = camera.target.z + SpaceData::LengthZ * 0.5f;
-    if (targetX >= SpaceData::LengthX) {
-        targetX -= SpaceData::LengthX;
+    ZoneScoped;
+    // const std::array<Color, 2> PlayerColors = {ColorTint(RED, tint), ColorTint(BLUE, tint)};
+
+    for (const auto& [position, radius] : lists.Asteroids) {
+        DrawSphereEx(position, radius, 5, 6, SpaceColor);
+        DrawSphereWires(position, radius, 5, 6, YELLOW);
     }
-    if (targetZ >= SpaceData::LengthZ) {
-        targetZ -= SpaceData::LengthZ;
+}
+
+void DrawParticles(const RenderLists& lists)
+{
+    ZoneScoped;
+    for (const auto& [position, color] : lists.Particles) {
+        DrawPoint3D(position, color);
     }
-    backgroundCamera.target = {targetX, 0.f, targetZ};
-    backgroundCamera.position =
-    Vector3Add(backgroundCamera.target, Vector3Scale(CameraData::CameraOffset, 1.75f));
-    return backgroundCamera;
+}
+
+Vector3 BackgroundOffset(const Camera& camera)
+{
+    return Vector3Subtract({SpaceData::LengthX * 0.5f, 0.f, SpaceData::LengthX * 0.5f},
+                           Vector3Scale(CameraData::CameraOffset, 0.9f));
 }
 } // namespace
 
@@ -203,6 +201,39 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
     Image glowImage =
     GenImageGradientRadial(GetScreenWidth() / 16, GetScreenWidth() / 16, 0.05f, WHITE, BLANK);
     mGlowTexture = LoadTextureFromImage(glowImage);
+
+    for (auto& renderBundle : mRenderTaskBundles) {
+        for (size_t i = 0; i < mViews; ++i) {
+            renderBundle.Tasks.push_back([&, i]() {
+                renderBundle.Outputs[i].Lists.BakeRespawners(renderBundle.Inputs[i].SimFrame,
+                                                             renderBundle.Inputs[i].Frustum);
+            });
+            renderBundle.Tasks.push_back([&, i]() {
+                renderBundle.Outputs[i].Lists.BakeSpaceships(renderBundle.Inputs[i].SimFrame,
+                                                             renderBundle.Inputs[i].Frustum);
+            });
+            renderBundle.Tasks.push_back([&, i]() {
+                renderBundle.Outputs[i].Lists.BakeExplosions(renderBundle.Inputs[i].SimFrame,
+                                                             renderBundle.Inputs[i].Frustum);
+            });
+            renderBundle.Tasks.push_back([&, i]() {
+                renderBundle.Outputs[i].Lists.BakeAsteroids(renderBundle.Inputs[i].SimFrame,
+                                                            renderBundle.Inputs[i].CameraRays,
+                                                            renderBundle.Inputs[i].Frustum);
+            });
+            renderBundle.Tasks.push_back([&, i]() {
+                renderBundle.Outputs[i].Lists.BakeBullets(renderBundle.Inputs[i].SimFrame,
+                                                          renderBundle.Inputs[i].Frustum);
+            });
+            renderBundle.Tasks.push_back([&, i]() {
+                renderBundle.Outputs[i].Lists.BakeParticles(renderBundle.Inputs[i].SimFrame,
+                                                            renderBundle.Inputs[i].Frustum);
+            });
+        }
+    }
+
+    mPassiveTaskBundles.push(1);
+    mPassiveTaskBundles.push(0);
 }
 
 Render::~Render()
@@ -213,106 +244,114 @@ Render::~Render()
     UnloadRenderTexture(mScreenTexture);
 }
 
-void Render::DrawScreenTexture(const entt::registry& registry)
+bool Render::TryStartRenderTasks(const entt::registry& registry)
 {
     ZoneScoped;
-    for (size_t i = 0; i < mViews; ++i) {
-        RenderTaskSource& source = mRenderTaskSources[i];
-        source.SimFrame = &registry;
-        source.MainCamera = mCameras[i];
-        source.Viewport = mViewPorts[i];
-    }
-
-    for (size_t i = 0; i < 2 * mViews; ++i) {
-        RenderTaskInput& input = mRenderTaskInputs[i];
-        const Camera& mainCamera = mCameras[i / 2];
-        if (i % 2 == 0) {
-            input.TargetCamera = mainCamera;
-        } else {
-            input.TargetCamera = MakeBackgroundCamera(mainCamera);
+    uint32_t bundleIndex;
+    {
+        std::scoped_lock lock(mBundleMutex);
+        if (mActiveTaskBundles.size() > 1) {
+            ZoneScopedN("Flushing Accumulated Frames");
+            bundleIndex = mActiveTaskBundles.front();
+            mActiveTaskBundles.pop();
+            mPassiveTaskBundles.push(bundleIndex);
         }
-        input.Frustum = ComputeFrustum(input.TargetCamera, mRenderTaskSources[i / 2].Viewport);
+        if (mPassiveTaskBundles.empty()) {
+            return false;
+        }
+        bundleIndex = mPassiveTaskBundles.top();
+        mPassiveTaskBundles.pop();
     }
 
-    auto clearRenderList = [](RenderList& list) {
-        ZoneScopedN("ClearLists");
-        list.Spaceships.clear();
-        list.Respawners.clear();
-        list.Asteroids.clear();
-        list.Particles.clear();
-        list.Bullets.clear();
-        list.Explosions.clear();
-        list.BakeProgress = 0;
-    };
+    auto& bundle = mRenderTaskBundles[bundleIndex];
 
     for (size_t i = 0; i < mViews; ++i) {
-        RenderPayload& payload = mRenderPayloads[i];
-        payload.MainCamera = mRenderTaskInputs[2 * i].TargetCamera;
-        clearRenderList(payload.MainList);
-        payload.BackgroundCamera = mRenderTaskInputs[2 * i + 1].TargetCamera;
-        clearRenderList(payload.BackgroundList);
+        auto& input = bundle.Inputs[i];
+        input.SimFrame = &registry;
+        input.Camera = mCameras[i];
+        input.Viewport = mViewPorts[i];
+        input.CameraRays = ComputeRays(mCameras[i], mViewPorts[i]);
+        input.Frustum = ComputeFrustum(mCameras[i], input.CameraRays);
+    }
+    for (size_t i = 0; i < mViews; ++i) {
+        bundle.Outputs[i].Camera = mCameras[i];
+        bundle.Outputs[i].Lists.Clear();
     }
 
-    if (mRenderTasks.empty()) {
-        auto makeMainTask = [this](size_t i, auto&& baker) {
-            return [&, i]() {
-                baker(mRenderTaskSources[i], mRenderTaskInputs[2 * i], mRenderPayloads[i].MainList);
-            };
-        };
+    mThreadPool.PushTasks(bundle.Tasks.begin(), bundle.Tasks.end());
+    {
+        std::scoped_lock lock(mBundleMutex);
+        mActiveTaskBundles.push(bundleIndex);
+    }
 
-        auto makeBackgroundTask = [this](size_t i, auto&& baker) {
-            return [&, i]() {
-                baker(mRenderTaskSources[i], mRenderTaskInputs[2 * i + 1], mRenderPayloads[i].BackgroundList);
-            };
-        };
-
-        for (size_t i = 0; i < mViews; ++i) {
-            mRenderTasks.push_back(makeBackgroundTask(i, BakeParticlesRenderList));
-            mRenderTasks.push_back(makeBackgroundTask(i, BakeSpaceshipsRenderList));
-            mRenderTasks.push_back(makeBackgroundTask(i, BakeAsteroidsRenderList));
-            mRenderTasks.push_back(makeBackgroundTask(i, BakeBulletsRenderList));
-            mRenderTasks.push_back(makeBackgroundTask(i, BakeExplosionsRenderList));
-        }
-
-        for (size_t i = 0; i < mViews; ++i) {
-            mRenderTasks.push_back(makeMainTask(i, BakeParticlesRenderList));
-            mRenderTasks.push_back(makeMainTask(i, BakeSpaceshipsRenderList));
-            mRenderTasks.push_back(makeMainTask(i, BakeAsteroidsRenderList));
-            mRenderTasks.push_back(makeMainTask(i, BakeBulletsRenderList));
-            mRenderTasks.push_back(makeMainTask(i, BakeExplosionsRenderList));
+    for (size_t i = 0; i < mViews; ++i) {
+        while (bundle.Outputs[i].Lists.BakeProgressFlags != RenderLists::AllProgressFlags) {
+            mThreadPool.TryHelpOneTask();
         }
     }
 
-    mThreadPool.PushTasks(mRenderTasks.begin(), mRenderTasks.end());
+    return true;
+}
+
+inline void WaitOnProgress(ThreadPool& threadPool, const RenderLists& lists, int32_t targetProgress)
+{
+    while ((lists.BakeProgressFlags & (1 << targetProgress)) == 0) {
+        threadPool.TryHelpOneTask();
+    }
+}
+
+bool Render::DrawScreenTexture()
+{
+    ZoneScoped;
+
+    uint32_t bundleIndex;
+    {
+        std::scoped_lock lock(mBundleMutex);
+        if (mActiveTaskBundles.empty()) {
+            return false;
+        }
+        if (mActiveTaskBundles.size() > 1) {
+            ZoneScopedN("Flushing Accumulated Frames");
+            bundleIndex = mActiveTaskBundles.front();
+            mActiveTaskBundles.pop();
+            mPassiveTaskBundles.push(bundleIndex);
+        }
+        bundleIndex = mActiveTaskBundles.front();
+        mActiveTaskBundles.pop();
+    }
+
+    auto& bundle = mRenderTaskBundles[bundleIndex];
 
     for (size_t i = 0; i < mViews; ++i) {
         const auto& viewPort = mViewPorts[i];
-        const auto& payload = mRenderPayloads[i];
+        const auto& output = bundle.Outputs[i];
 
         BeginTextureMode(mViewPortTextures[i]);
         ClearBackground(SpaceColor);
 
-        BeginMode3D(payload.BackgroundCamera);
+        BeginMode3D(output.Camera);
 
-        while (mRenderPayloads[i].BackgroundList.BakeProgress < RenderList::MaxBakeProgress) {
-            mThreadPool.TryHelpOneTask();
-        }
+        WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressRespawners);
+        DrawRespawns(bundle.Outputs[i].Lists);
+        WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressSpaceships);
+        DrawSpaceships(bundle.Outputs[i].Lists);
+        WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressExplosions);
+        DrawExplosions(bundle.Outputs[i].Lists);
+        WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressBullets);
+        DrawBullets(bundle.Outputs[i].Camera, mGlowTexture, bundle.Outputs[i].Lists);
+        WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressAsteroids);
+        DrawAsteroids(bundle.Outputs[i].Lists);
+        WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressParticles);
+        DrawParticles(bundle.Outputs[i].Lists);
 
-        DrawToCurrentTarget(payload.BackgroundList, {150, 150, 150, 200});
-        DrawBulletsToCurrentTarget(payload.BackgroundCamera, mGlowTexture, payload.BackgroundList);
-        EndMode3D();
-
-        BeginMode3D(payload.MainCamera);
-
-        while (mRenderPayloads[i].MainList.BakeProgress < RenderList::MaxBakeProgress) {
-            mThreadPool.TryHelpOneTask();
-        }
-
-        DrawToCurrentTarget(payload.MainList, WHITE);
-        DrawBulletsToCurrentTarget(payload.MainCamera, mGlowTexture, payload.MainList);
         EndMode3D();
 
         EndTextureMode();
+    }
+
+    {
+        std::scoped_lock lock(mBundleMutex);
+        mPassiveTaskBundles.push(bundleIndex);
     }
 
     BeginTextureMode(mScreenTexture);
@@ -325,98 +364,10 @@ void Render::DrawScreenTexture(const entt::registry& registry)
         DrawLine(mViewPorts[1].x, mViewPorts[1].y, mViewPorts[1].x, mViewPorts[1].height, WHITE);
     }
     EndTextureMode();
+    return true;
 }
 
 const Texture& Render::ScreenTexture() const
 {
     return mScreenTexture.texture;
-}
-
-void Render::BakeSpaceshipsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList)
-{
-    ZoneScoped;
-    targetList.Spaceships.clear();
-    for (auto entity :
-         source.SimFrame->view<PositionComponent, OrientationComponent, SpaceshipInputComponent>()) {
-        const auto& position = source.SimFrame->get<PositionComponent>(entity).Position;
-        if (auto renderPosition =
-            FindFrustumVisiblePosition(input.Frustum, position, SpaceshipData::CollisionRadius)) {
-            const auto& orientation = source.SimFrame->get<OrientationComponent>(entity).Rotation;
-            const uint32_t inputID = source.SimFrame->get<SpaceshipInputComponent>(entity).InputId;
-            targetList.Spaceships.emplace_back(renderPosition.value(), orientation, inputID);
-        }
-    }
-
-    for (auto respawner : source.SimFrame->view<RespawnComponent, PositionComponent>()) {
-        const auto& respawnComponent = source.SimFrame->get<RespawnComponent>(respawner);
-        if (respawnComponent.TimeLeft > 0.f) {
-            continue;
-        }
-        const auto& position = source.SimFrame->get<PositionComponent>(respawner).Position;
-        if (auto renderPosition =
-            FindFrustumVisiblePosition(input.Frustum, position, SpaceshipData::CollisionRadius)) {
-            targetList.Respawners.emplace_back(renderPosition.value(), respawnComponent.InputId);
-        }
-    }
-
-    targetList.BakeProgress += 1;
-}
-
-void Render::BakeAsteroidsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList)
-{
-    ZoneScoped;
-    targetList.Asteroids.clear();
-    for (auto asteroid : source.SimFrame->view<AsteroidComponent>()) {
-        const float radius = source.SimFrame->get<AsteroidComponent>(asteroid).Radius;
-        const Vector3 position = source.SimFrame->get<PositionComponent>(asteroid).Position;
-        if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, radius)) {
-            targetList.Asteroids.emplace_back(renderPosition.value(), radius);
-        }
-    }
-    targetList.BakeProgress += 1;
-}
-
-void Render::BakeParticlesRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList)
-{
-    ZoneScoped;
-    targetList.Particles.clear();
-    for (entt::entity particle : source.SimFrame->view<ParticleComponent>(entt::exclude<BulletComponent>)) {
-        const Vector3 position = source.SimFrame->get<PositionComponent>(particle).Position;
-        if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, 0.f)) {
-            const Color color = source.SimFrame->get<ParticleComponent>(particle).Color;
-            targetList.Particles.emplace_back(renderPosition.value(), color);
-        }
-    }
-    targetList.BakeProgress += 1;
-}
-
-void Render::BakeBulletsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList)
-{
-    ZoneScoped;
-    targetList.Bullets.clear();
-    for (entt::entity particle : source.SimFrame->view<BulletComponent>()) {
-        const Vector3 position = source.SimFrame->get<PositionComponent>(particle).Position;
-        if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, 0.f)) {
-            const Color color = source.SimFrame->get<ParticleComponent>(particle).Color;
-            targetList.Bullets.emplace_back(renderPosition.value(), color);
-        }
-    }
-    targetList.BakeProgress += 1;
-}
-
-void Render::BakeExplosionsRenderList(const RenderTaskSource& source, const RenderTaskInput& input, RenderList& targetList)
-{
-    ZoneScoped;
-    targetList.Explosions.clear();
-    for (auto explosion : source.SimFrame->view<ExplosionComponent>()) {
-        const Vector3& position = source.SimFrame->get<PositionComponent>(explosion).Position;
-        const ExplosionComponent& explosionComponent = source.SimFrame->get<ExplosionComponent>(explosion);
-        const float radius = explosionComponent.CurrentRadius;
-        const float relativeRadius = radius / explosionComponent.TerminalRadius;
-        if (auto renderPosition = FindFrustumVisiblePosition(input.Frustum, position, radius)) {
-            targetList.Explosions.emplace_back(renderPosition.value(), radius,
-                                               std::clamp(relativeRadius, 0.f, 1.f));
-        }
-    }
-    targetList.BakeProgress += 1;
 }

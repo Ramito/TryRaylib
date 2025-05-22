@@ -9,6 +9,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "rcamera.h"
+#include <Render/RenderLists.h>
 #include <mutex>
 #include <queue>
 #include <stack>
@@ -24,7 +25,7 @@ static void SetupWindow()
     const int targetHeight = GetMonitorHeight(display);
     SetWindowPosition(0, 0);
     SetWindowSize(targetWidth, targetHeight);
-    SetTargetFPS(GetMonitorRefreshRate(display));
+    SetTargetFPS(SimTimeData::TargetFPS); // GetMonitorRefreshRate(display));
 }
 
 void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInput, MaxViews>& gameInputs)
@@ -153,10 +154,12 @@ int main()
     std::mutex transferMutex;
     std::array<entt::registry, 2> simSnapShots;
     std::stack<uint32_t> writeReadySnapshots;
-    std::queue<uint32_t> renderReadySnapshots;
+    std::queue<uint32_t> presentReadySnapshots;
 
-    uint32_t renderSnapshot = 1;
+    uint32_t renderSnapshotId = 1;
     writeReadySnapshots.push(0);
+
+    std::condition_variable presentCondition;
 
     auto simThreadProcess = [&](std::stop_token sToken) {
         double gameStartTime = GetTime();
@@ -166,19 +169,20 @@ int main()
             sim->Tick();
             simTicks += 1;
 
-            uint32_t snapshot = simSnapShots.size();
+            uint32_t snapshotId = simSnapShots.size();
             if (!writeReadySnapshots.empty()) {
                 std::scoped_lock lock(transferMutex);
-                snapshot = writeReadySnapshots.top();
+                snapshotId = writeReadySnapshots.top();
                 writeReadySnapshots.pop();
             }
 
-            if (snapshot < simSnapShots.size()) {
-                sim->WriteRenderState(simSnapShots[snapshot]);
+            if (snapshotId < simSnapShots.size()) {
+                sim->WriteRenderState(simSnapShots[snapshotId]);
                 {
                     std::scoped_lock lock(transferMutex);
-                    renderReadySnapshots.push(snapshot);
+                    presentReadySnapshots.push(snapshotId);
                 }
+                presentCondition.notify_one();
             }
 
             double gameTime = gameStartTime + SimTimeData::DeltaTime * simTicks;
@@ -190,10 +194,41 @@ int main()
         }
     };
 
+    auto presentThreadProcess = [&](std::stop_token sToken) {
+        RenderLists pendingList;
+        while (!sToken.stop_requested()) {
+            {
+                ZoneScopedNC("Wait", 0x7777AAFF);
+                std::unique_lock lock(transferMutex);
+                presentCondition.wait(lock, [&]() {
+                    return sToken.stop_requested() || !presentReadySnapshots.empty();
+                });
+                if (presentReadySnapshots.empty()) {
+                    continue;
+                }
+                renderSnapshotId = presentReadySnapshots.front();
+                presentReadySnapshots.pop();
+            }
+            UpdateCameras(simSnapShots[renderSnapshotId], *gameCameras);
+            while (!render->TryStartRenderTasks(simSnapShots[renderSnapshotId]) && !sToken.stop_requested()) {
+                std::this_thread::sleep_for(std::chrono::duration<float>(0.001f));
+            }
+            simSnapShots[renderSnapshotId].clear();
+            {
+                std::scoped_lock lock(transferMutex);
+                writeReadySnapshots.push(renderSnapshotId);
+            }
+        }
+    };
+
     std::unique_ptr<std::jthread> simThread = std::make_unique<std::jthread>(simThreadProcess);
+    std::unique_ptr<std::jthread> presentThread = std::make_unique<std::jthread>(presentThreadProcess);
 
     auto startGameAction = [&](uint32_t players) {
         simThread.reset();
+        presentThread->request_stop();
+        presentCondition.notify_all();
+        presentThread.reset();
 
         sim = std::make_unique<Simulation>(simDependencies);
         sim->Init(players);
@@ -201,26 +236,16 @@ int main()
         render = std::make_unique<Render>(players, renderDependencies);
 
         simThread = std::make_unique<std::jthread>(simThreadProcess);
+        presentThread = std::make_unique<std::jthread>(presentThreadProcess);
     };
 
     while (!WindowShouldClose()) {
         ZoneScopedN("Main Loop");
-        menu.UpdateMenu(startGameAction);
-
-        if (renderReadySnapshots.empty()) {
+        if (!render->DrawScreenTexture()) {
             continue;
         }
 
-        simSnapShots[renderSnapshot].clear();
-        {
-            ZoneScoped("GetSimFrame");
-            std::scoped_lock lock(transferMutex);
-            writeReadySnapshots.push(renderSnapshot);
-            renderSnapshot = renderReadySnapshots.front();
-            renderReadySnapshots.pop();
-        }
-        UpdateCameras(simSnapShots[renderSnapshot], *gameCameras);
-        render->DrawScreenTexture(simSnapShots[renderSnapshot]);
+        menu.UpdateMenu(startGameAction);
 
         BeginDrawing();
         DrawTextureRec(render->ScreenTexture(),
@@ -230,6 +255,9 @@ int main()
     }
 
     simThread.reset();
+    presentThread->request_stop();
+    presentCondition.notify_all();
+    presentThread.reset();
 
     CloseWindow();
 }
