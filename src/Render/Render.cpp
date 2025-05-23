@@ -2,6 +2,7 @@
 
 #include "Components.h"
 #include "Data.h"
+#include "FrustumPlaneData.h"
 #include "SpaceUtil.h"
 #include "Tracy.hpp"
 #include <optional>
@@ -206,14 +207,17 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
         for (size_t i = 0; i < mViews; ++i) {
             renderBundle.Tasks.push_back([&, i]() {
                 renderBundle.Outputs[i].Lists.BakeRespawners(renderBundle.Inputs[i].SimFrame,
+                                                             renderBundle.Inputs[i].CameraRays,
                                                              renderBundle.Inputs[i].Frustum);
             });
             renderBundle.Tasks.push_back([&, i]() {
                 renderBundle.Outputs[i].Lists.BakeSpaceships(renderBundle.Inputs[i].SimFrame,
+                                                             renderBundle.Inputs[i].CameraRays,
                                                              renderBundle.Inputs[i].Frustum);
             });
             renderBundle.Tasks.push_back([&, i]() {
                 renderBundle.Outputs[i].Lists.BakeExplosions(renderBundle.Inputs[i].SimFrame,
+                                                             renderBundle.Inputs[i].CameraRays,
                                                              renderBundle.Inputs[i].Frustum);
             });
             renderBundle.Tasks.push_back([&, i]() {
@@ -223,10 +227,12 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
             });
             renderBundle.Tasks.push_back([&, i]() {
                 renderBundle.Outputs[i].Lists.BakeBullets(renderBundle.Inputs[i].SimFrame,
+                                                          renderBundle.Inputs[i].CameraRays,
                                                           renderBundle.Inputs[i].Frustum);
             });
             renderBundle.Tasks.push_back([&, i]() {
                 renderBundle.Outputs[i].Lists.BakeParticles(renderBundle.Inputs[i].SimFrame,
+                                                            renderBundle.Inputs[i].CameraRays,
                                                             renderBundle.Inputs[i].Frustum);
             });
         }

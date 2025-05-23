@@ -25,7 +25,7 @@ static void SetupWindow()
     const int targetHeight = GetMonitorHeight(display);
     SetWindowPosition(0, 0);
     SetWindowSize(targetWidth, targetHeight);
-    SetTargetFPS(SimTimeData::TargetFPS); // GetMonitorRefreshRate(display));
+    SetTargetFPS(GetMonitorRefreshRate(display));
 }
 
 void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInput, MaxViews>& gameInputs)
