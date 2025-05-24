@@ -153,14 +153,14 @@ void DrawBullets(const Camera& camera, const Texture& glow, const RenderLists& l
     EndBlendMode();
 }
 
-void DrawAsteroids(const RenderLists& lists)
+void DrawAsteroids(const RenderLists& lists, const Model& asteroidModel, Shader& shader, const Camera3D& camera)
 {
     ZoneScoped;
-    // const std::array<Color, 2> PlayerColors = {ColorTint(RED, tint), ColorTint(BLUE, tint)};
+
+    SetShaderValue(shader, shader.locs[SHADER_LOC_VECTOR_VIEW], &camera.position.x, SHADER_UNIFORM_VEC3);
 
     for (const auto& [position, radius] : lists.Asteroids) {
-        DrawSphereEx(position, radius, 5, 6, SpaceColor);
-        DrawSphereWires(position, radius, 5, 6, YELLOW);
+        DrawModel(asteroidModel, position, radius, RED);
     }
 }
 
@@ -176,6 +176,20 @@ Vector3 BackgroundOffset(const Camera& camera)
 {
     return Vector3Subtract({SpaceData::LengthX * 0.5f, 0.f, SpaceData::LengthX * 0.5f},
                            Vector3Scale(CameraData::CameraOffset, 0.9f));
+}
+
+void SetShader(Shader& shader)
+{
+    shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(shader, "viewPos");
+
+    int ambientLoc = GetShaderLocation(shader, "ambient");
+    const float ambienLight = 0.65f;
+    constexpr std::array<float, 4> ambientInput = {ambienLight, ambienLight, ambienLight, 1.0f};
+    SetShaderValue(shader, ambientLoc, ambientInput.data(), SHADER_UNIFORM_VEC4);
+
+    const float fogDensity = 0.00725f;
+    int fogDensityLoc = GetShaderLocation(shader, "fogDensity");
+    SetShaderValue(shader, fogDensityLoc, &fogDensity, SHADER_UNIFORM_FLOAT);
 }
 } // namespace
 
@@ -202,6 +216,12 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
     Image glowImage =
     GenImageGradientRadial(GetScreenWidth() / 16, GetScreenWidth() / 16, 0.05f, WHITE, BLANK);
     mGlowTexture = LoadTextureFromImage(glowImage);
+
+    mFowShader = LoadShader("resources/lighting.vs", "resources/fog.fs");
+    SetShader(mFowShader);
+
+    mAsteroidModel = LoadModelFromMesh(GenMeshSphere(1.f, 16, 16));
+    mAsteroidModel.materials[0].shader = mFowShader;
 
     for (auto& renderBundle : mRenderTaskBundles) {
         for (size_t i = 0; i < mViews; ++i) {
@@ -248,6 +268,8 @@ Render::~Render()
         UnloadRenderTexture(mViewPortTextures[i]);
     }
     UnloadRenderTexture(mScreenTexture);
+    UnloadModel(mAsteroidModel);
+    UnloadShader(mFowShader);
 }
 
 bool Render::TryStartRenderTasks(const entt::registry& registry)
@@ -346,7 +368,7 @@ bool Render::DrawScreenTexture()
         WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressBullets);
         DrawBullets(bundle.Outputs[i].Camera, mGlowTexture, bundle.Outputs[i].Lists);
         WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressAsteroids);
-        DrawAsteroids(bundle.Outputs[i].Lists);
+        DrawAsteroids(bundle.Outputs[i].Lists, mAsteroidModel, mFowShader, bundle.Outputs[i].Camera);
         WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressParticles);
         DrawParticles(bundle.Outputs[i].Lists);
 

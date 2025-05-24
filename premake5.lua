@@ -77,6 +77,11 @@ project "Game"
 	filter{}
 	libdirs {TARGET_DIR}
 
+	postbuildcommands {
+		"{MKDIR} %[%{!cfg.targetdir}/resources]",
+		"{COPYFILE} %[resources/*.*] %[%{!cfg.targetdir}/resources/*.*]"
+	}
+
 -- Older versions of premake can't handle "None" project types for gmake2
 if _TARGET_OS ~= "linux" then
 	include "entt-premake5.lua"

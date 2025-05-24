@@ -51,6 +51,9 @@ private:
 
     Texture mGlowTexture;
 
+    Shader mFowShader;
+    Model mAsteroidModel;
+
     ThreadPool mThreadPool;
     struct RenderTaskBundle
     {
