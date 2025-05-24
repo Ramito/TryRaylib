@@ -1,6 +1,7 @@
 #include "Render.h"
 
 #include "Components.h"
+#include "CustomMesh.h"
 #include "Data.h"
 #include "FrustumPlaneData.h"
 #include "SpaceUtil.h"
@@ -191,6 +192,33 @@ void SetShader(Shader& shader)
     int fogDensityLoc = GetShaderLocation(shader, "fogDensity");
     SetShaderValue(shader, fogDensityLoc, &fogDensity, SHADER_UNIFORM_FLOAT);
 }
+
+Mesh MakeAsteroidMesh()
+{
+    std::array<Vector3, 42> srcVertices;
+    std::array<uint16_t, 240> srcTriangles;
+    CustomMesh::SphereMesh(srcVertices, srcTriangles);
+
+    float* vertices = (float*)MemAlloc(sizeof(srcVertices));
+    memcpy(vertices, srcVertices.data(), sizeof(srcVertices));
+
+    float* normals = (float*)MemAlloc(sizeof(srcVertices));
+    memcpy(normals, srcVertices.data(), sizeof(srcVertices));
+
+    uint16_t* triangles = (uint16_t*)MemAlloc(sizeof(srcTriangles));
+    memcpy(triangles, srcTriangles.data(), sizeof(srcTriangles));
+
+    Mesh mesh = {};
+
+    mesh.vertexCount = 42;
+    mesh.vertices = vertices;
+    mesh.normals = normals;
+
+    mesh.triangleCount = 240;
+    mesh.indices = triangles;
+
+    return mesh;
+}
 } // namespace
 
 Render::Render(uint32_t views, RenderDependencies& dependencies)
@@ -213,14 +241,16 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
 
     mScreenTexture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
-    Image glowImage =
-    GenImageGradientRadial(GetScreenWidth() / 16, GetScreenWidth() / 16, 0.05f, WHITE, BLANK);
+    Image glowImage = GenImageGradientRadial(200, 200, 0.05f, WHITE, BLANK);
     mGlowTexture = LoadTextureFromImage(glowImage);
+    UnloadImage(glowImage);
 
     mFowShader = LoadShader("resources/lighting.vs", "resources/fog.fs");
     SetShader(mFowShader);
 
-    mAsteroidModel = LoadModelFromMesh(GenMeshSphere(1.f, 16, 16));
+    Mesh asteroidMesh = MakeAsteroidMesh();
+    UploadMesh(&asteroidMesh, false);
+    mAsteroidModel = LoadModelFromMesh(asteroidMesh);
     mAsteroidModel.materials[0].shader = mFowShader;
 
     for (auto& renderBundle : mRenderTaskBundles) {
