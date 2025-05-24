@@ -160,7 +160,7 @@ void DrawAsteroids(const RenderLists& lists, const Model& asteroidModel, Shader&
     SetShaderValue(shader, shader.locs[SHADER_LOC_VECTOR_VIEW], &camera.position.x, SHADER_UNIFORM_VEC3);
 
     for (const auto& [position, radius] : lists.Asteroids) {
-        DrawModel(asteroidModel, position, radius, RED);
+        DrawModel(asteroidModel, position, radius, GRAY);
     }
 }
 
@@ -183,7 +183,7 @@ void SetShader(Shader& shader)
     shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(shader, "viewPos");
 
     int ambientLoc = GetShaderLocation(shader, "ambient");
-    const float ambienLight = 0.65f;
+    const float ambienLight = 0.25f;
     constexpr std::array<float, 4> ambientInput = {ambienLight, ambienLight, ambienLight, 1.0f};
     SetShaderValue(shader, ambientLoc, ambientInput.data(), SHADER_UNIFORM_VEC4);
 
@@ -246,14 +246,14 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
                                                             renderBundle.Inputs[i].Frustum);
             });
             renderBundle.Tasks.push_back([&, i]() {
-                renderBundle.Outputs[i].Lists.BakeBullets(renderBundle.Inputs[i].SimFrame,
-                                                          renderBundle.Inputs[i].CameraRays,
-                                                          renderBundle.Inputs[i].Frustum);
-            });
-            renderBundle.Tasks.push_back([&, i]() {
                 renderBundle.Outputs[i].Lists.BakeParticles(renderBundle.Inputs[i].SimFrame,
                                                             renderBundle.Inputs[i].CameraRays,
                                                             renderBundle.Inputs[i].Frustum);
+            });
+            renderBundle.Tasks.push_back([&, i]() {
+                renderBundle.Outputs[i].Lists.BakeBullets(renderBundle.Inputs[i].SimFrame,
+                                                          renderBundle.Inputs[i].CameraRays,
+                                                          renderBundle.Inputs[i].Frustum);
             });
         }
     }
@@ -365,12 +365,12 @@ bool Render::DrawScreenTexture()
         DrawSpaceships(bundle.Outputs[i].Lists);
         WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressExplosions);
         DrawExplosions(bundle.Outputs[i].Lists);
-        WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressBullets);
-        DrawBullets(bundle.Outputs[i].Camera, mGlowTexture, bundle.Outputs[i].Lists);
         WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressAsteroids);
         DrawAsteroids(bundle.Outputs[i].Lists, mAsteroidModel, mFowShader, bundle.Outputs[i].Camera);
         WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressParticles);
         DrawParticles(bundle.Outputs[i].Lists);
+        WaitOnProgress(mThreadPool, bundle.Outputs[i].Lists, RenderLists::ProgressBullets);
+        DrawBullets(bundle.Outputs[i].Camera, mGlowTexture, bundle.Outputs[i].Lists);
 
         EndMode3D();
 
