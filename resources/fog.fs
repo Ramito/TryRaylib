@@ -49,9 +49,9 @@ void main()
     vec3 tanX = dFdx(fragPosition);
     vec3 tanY = dFdy(fragPosition);
     vec3 normal = normalize(cross(tanX, tanY));
-    //vec3 normal = normalize(fragNormal);
+    // vec3 normal = normalize(fragNormal);
 
-    const vec3 light = normalize(vec3(0.2, 1.0, 0.2));
+    const vec3 light = normalize(vec3(0.2, 1.0, 0.5));
     vec3 lightDot = vec3(clamp(dot(normal, light), 0.0, 1.0));
 
     finalColor = (texelColor*((colDiffuse + vec4(specular,1))*vec4(lightDot, 1.0)));

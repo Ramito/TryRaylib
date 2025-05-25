@@ -59,7 +59,7 @@ void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const
 {
     constexpr float scale = 0.65f;
 
-    std::vector<Vector3> vertices = {
+    std::array<Vector3, 7> vertices = {
     Vector3{0.f, 0.f, 2.f * scale},               // 0 : nose
     Vector3{-1.25f * scale, 0.f, -scale},         // 1 : wingL
     Vector3{1.25f * scale, 0.f, -scale},          // 2 : wingR
@@ -69,7 +69,9 @@ void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const
     Vector3{0.f, -0.75f * scale, -0.75f * scale}, // 6 : finB
     };
 
-    const std::vector<std::array<int, 3>> triangles = {{0, 1, 2}, {3, 4, 5}, {0, 4, 6}};
+    constexpr std::array<std::array<int, 3>, 3> triangles = {std::array<int, 3>{0, 1, 2},
+                                                             std::array<int, 3>{3, 4, 5},
+                                                             std::array<int, 3>{0, 4, 6}};
 
     for (Vector3& vertex : vertices) {
         vertex = Vector3RotateByQuaternion(vertex, orientation);
