@@ -48,18 +48,17 @@ public:
         const float minZ = frustumPlaneData.MinZ - radius;
         const float maxZ = frustumPlaneData.MaxZ + radius;
 
-        const int fromNX = ceil((minX - position.x) / SpaceData::LengthX);
-        const int toNX = floor((maxX - position.x) / SpaceData::LengthX);
-        const int fromNZ = ceil((minZ - position.z) / SpaceData::LengthZ);
-        const int toNZ = floor((maxZ - position.z) / SpaceData::LengthZ);
+        const float fromNX = ceil((minX - position.x) / SpaceData::LengthX);
+        const float toNX = floor((maxX - position.x) / SpaceData::LengthX);
+        const float fromNZ = ceil((minZ - position.z) / SpaceData::LengthZ);
+        const float toNZ = floor((maxZ - position.z) / SpaceData::LengthZ);
 
         constexpr Vector3 horizontalTranslate = {SpaceData::LengthX, 0.f, 0.f};
         constexpr Vector3 verticalTranslate = {0.f, 0.f, SpaceData::LengthZ};
-        for (int iX = fromNX; iX <= toNX; ++iX) {
-            for (int iZ = fromNZ; iZ <= toNZ; ++iZ) {
-                const Vector3 testPosition =
-                Vector3Add(position, Vector3Add(Vector3Scale(horizontalTranslate, iX),
-                                                Vector3Scale(verticalTranslate, iZ)));
+        for (float iX = fromNX; iX <= toNX; ++iX) {
+            for (float iZ = fromNZ; iZ <= toNZ; ++iZ) {
+                const Vector3 translation = (horizontalTranslate * iX) + (verticalTranslate * iZ);
+                const Vector3 testPosition = position + translation;
 
                 float topSupport = Vector3DotProduct(frustum.TopNormal, testPosition) - radius;
                 float leftSupport = Vector3DotProduct(frustum.LeftNormal, testPosition) - radius;

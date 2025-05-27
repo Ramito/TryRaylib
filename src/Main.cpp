@@ -31,7 +31,7 @@ static void SetupWindow()
 void UpdateInput(const std::array<Camera, MaxViews>& cameras, std::array<GameInput, MaxViews>& gameInputs)
 {
     ZoneScopedN("Update Input");
-    for (size_t idx = 0; idx < gameInputs.size(); ++idx) {
+    for (int idx = 0; idx < gameInputs.size(); ++idx) {
         GameInput& gameInput = gameInputs[idx];
         const Camera& camera = cameras[idx];
 

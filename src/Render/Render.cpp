@@ -78,7 +78,7 @@ void DrawSpaceShip(const Vector3& position, const Quaternion& orientation, const
     }
 
     for (Vector3& vertex : vertices) {
-        vertex = Vector3Add(vertex, position);
+        vertex += position;
     }
 
     rlBegin(RL_TRIANGLES);
@@ -113,9 +113,10 @@ const std::array<Color, 2> PlayerColors = {RED, BLUE};
 void DrawRespawns(const RenderLists& lists)
 {
     ZoneScoped;
+    const float time = static_cast<float>(GetTime());
     for (const auto& [position, inputID] : lists.Respawners) {
         DrawCircle3D(position,
-                     RespawnData::MarkerRadius * 0.5f * (1.f + sin(GetTime() * RespawnData::MarkerFrequency)),
+                     RespawnData::MarkerRadius * 0.5f * (1.f + sinf(RespawnData::MarkerFrequency * time)),
                      Left3, 90.f, PlayerColors[inputID]);
     }
 }
@@ -236,8 +237,8 @@ Render::Render(uint32_t views, RenderDependencies& dependencies)
     }
 
     for (size_t i = 0; i < mViewPorts.size(); ++i) {
-        int width = mViewPorts[i].width;
-        int height = mViewPorts[i].height;
+        const int width = static_cast<int>(mViewPorts[i].width);
+        const int height = static_cast<int>(mViewPorts[i].height);
         mViewPortTextures[i] = LoadRenderTexture(width, height);
     }
 
@@ -383,7 +384,6 @@ bool Render::DrawScreenTexture()
     auto& bundle = mRenderTaskBundles[bundleIndex];
 
     for (size_t i = 0; i < mViews; ++i) {
-        const auto& viewPort = mViewPorts[i];
         const auto& output = bundle.Outputs[i];
 
         BeginTextureMode(mViewPortTextures[i]);
@@ -421,7 +421,8 @@ bool Render::DrawScreenTexture()
         DrawTextureRec(mViewPortTextures[i].texture, target, {mViewPorts[i].x, mViewPorts[i].y}, WHITE);
     }
     if (mViews > 1) {
-        DrawLine(mViewPorts[1].x, mViewPorts[1].y, mViewPorts[1].x, mViewPorts[1].height, WHITE);
+        DrawLine(static_cast<int>(mViewPorts[1].x), static_cast<int>(mViewPorts[1].y),
+                 static_cast<int>(mViewPorts[1].x), static_cast<int>(mViewPorts[1].height), WHITE);
     }
     EndTextureMode();
     return true;

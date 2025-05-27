@@ -36,39 +36,43 @@ void Menu::UpdateMenu(std::function<void(uint32_t)>&& startgameAction)
 void Menu::DrawMenu()
 {
     if (mMenuActive) {
-        GuiEnable();
         mAlpha = std::min(1.f, mAlpha + 0.05f);
-        GuiFade(mMenuActive);
+        GuiFade(BLANK, mAlpha);
+        if (mAlpha) {
+            GuiEnable();
+        }
     } else {
         mAlpha = std::max(0.f, mAlpha - 0.025f);
-        GuiFade(mAlpha);
+        GuiFade(BLANK, mAlpha);
         if (mAlpha == 0.f) {
             GuiDisable();
             return;
         }
     }
-    float width = GetScreenWidth();
-    float height = GetScreenHeight();
-    float buttonWidth = width / 3;
-    float buttonHeight = height / 5;
+    int width = GetScreenWidth();
+    int height = GetScreenHeight();
+    float buttonWidth = width / 3.f;
+    float buttonHeight = height / 5.f;
 
-    Rectangle text = {0, height / 8, width, height / 4};
+    Rectangle text = {0, height / 8.f, width * 1.f, height / 4.f};
     GuiSetStyle(DEFAULT, TEXT_SPACING, 10);
+
+    const int alpha = static_cast<int>(mAlpha * 255);
 
     GuiSetStyle(DEFAULT, TEXT_SIZE, 200);
     Color textColor = GOLD;
-    textColor.a = mAlpha * 255;
+    textColor.a = alpha;
     GuiDrawText("ACES", text, TEXT_ALIGN_CENTER, textColor);
 
     GuiSetStyle(DEFAULT, TEXT_SIZE, 50);
     textColor = WHITE;
-    textColor.a = mAlpha * 255;
+    textColor.a = alpha;
     text.y += height / 16;
     GuiDrawText("ON THE", text, TEXT_ALIGN_CENTER, textColor);
 
     GuiSetStyle(DEFAULT, TEXT_SIZE, 150);
     textColor = GOLD;
-    textColor.a = mAlpha * 255;
+    textColor.a = alpha;
     text.y += height / 16;
     GuiDrawText("FIELD", text, TEXT_ALIGN_CENTER, textColor);
 
@@ -86,8 +90,8 @@ void Menu::DrawMenu()
     } else {
         GuiSetState(STATE_NORMAL);
     }
-    if (GuiButton(button, "1 Player")) {
-        mP1Button = mMenuActive && true;
+    if ((mAlpha == 1.f) && GuiButton(button, "1 Player")) {
+        mP1Button = true;
     }
 
     button.y += 1.25f * buttonHeight;
@@ -98,8 +102,8 @@ void Menu::DrawMenu()
     } else {
         GuiSetState(STATE_NORMAL);
     }
-    if (GuiButton(button, "2 Players")) {
-        mP2Button = mMenuActive && true;
+    if ((mAlpha == 1.f) && GuiButton(button, "2 Players")) {
+        mP2Button = true;
     }
     mMenuActive = mMenuActive && !mP1Button && !mP2Button;
 

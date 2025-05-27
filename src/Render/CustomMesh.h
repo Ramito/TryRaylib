@@ -28,15 +28,15 @@ uint16_t getOrRegisterEdgeNewVertexIndex(uint16_t edgeA,
         vertices[12 + registeredEdges] = {newVertex};
         ++registeredEdges;
     }
-    return 12 + std ::distance(edges.begin(), it);
+    return (short)(12 + std ::distance(edges.begin(), it));
 }
 } // namespace
 
 void IcosahedronMesh(std::array<Vector3, 12>& vertices, std::array<uint16_t, 20 * 3>& triangles)
 {
-    constexpr double zero = 0.0;
-    constexpr double one = 1.0;
-    constexpr double phi = std::numbers::phi;
+    constexpr float zero = 0.0;
+    constexpr float one = 1.0;
+    constexpr float phi = std::numbers::phi_v<float>;
 
     vertices[0] = Vector3{-one, -phi, zero};
     vertices[1] = Vector3{one, -phi, zero};
@@ -53,9 +53,9 @@ void IcosahedronMesh(std::array<Vector3, 12>& vertices, std::array<uint16_t, 20 
     vertices[10] = Vector3{phi, zero, one};
     vertices[11] = Vector3{-phi, zero, one};
 
-    double normalizer = sqrt(one / (one + phi * phi));
+    const float normalizer = sqrt(one / (one + (phi * phi)));
     for (auto& vertex : vertices) {
-        vertex = Vector3Scale(vertex, normalizer);
+        vertex *= normalizer;
     }
 
     // Triangles with vertex 0

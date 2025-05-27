@@ -52,8 +52,8 @@ constexpr int CellCountZ = 25;
 namespace SpaceshipData {
 constexpr float MinThrust = 8.f;
 constexpr float Thrust = 15.f;
-constexpr float LinearDrag = 1e-5;
-constexpr float QuadraticDrag = 1e-3;
+constexpr float LinearDrag = 1e-5f;
+constexpr float QuadraticDrag = 1e-3f;
 
 constexpr float Yaw = 0.4f;
 constexpr float Pitch = 2.5f;
@@ -86,7 +86,7 @@ constexpr std::array<Vector3, 3> ShootBones = {Vector3{0.6f, -0.05f, 0.f}, Vecto
 
 namespace ParticleData {
 constexpr float LinearDrag = 0.f;
-constexpr float QuadraticDrag = 1e-2;
+constexpr float QuadraticDrag = 1e-2f;
 } // namespace ParticleData
 
 namespace ExplosionData {
