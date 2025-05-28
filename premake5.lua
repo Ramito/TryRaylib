@@ -10,7 +10,7 @@ local LIB_DIR = "lib"
 local ENTT_DIR = path.join(LIB_DIR, "entt")
 local RAYLIB_DIR = path.join(LIB_DIR, "raylib")
 local RAYGUI_DIR = path.join(LIB_DIR, "raygui")
-local TRACY_DIR = path.join(LIB_DIR, "tracy")
+local TRACY_DIR = path.join(LIB_DIR, "tracy/public")
 
 solution "RayTest"
 	location(BUILD_DIR)

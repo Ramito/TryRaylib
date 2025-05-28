@@ -5,7 +5,7 @@
 #include "Data.h"
 #include "FrustumPlaneData.h"
 #include "SpaceUtil.h"
-#include "Tracy.hpp"
+#include <tracy/Tracy.hpp>
 #include <optional>
 #include <raymath.h>
 #include <rlgl.h>

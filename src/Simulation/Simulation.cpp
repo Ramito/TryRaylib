@@ -1,5 +1,5 @@
 #include "Simulation.h"
-#include "Tracy.hpp"
+#include <tracy/Tracy.hpp>
 
 #include "Components.h"
 #include <raymath.h>

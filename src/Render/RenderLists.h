@@ -4,7 +4,7 @@
 #include "Components.h"
 #include "FrustumPlaneData.h"
 #include <SpaceUtil.h>
-#include <Tracy.hpp>
+#include <tracy/Tracy.hpp>
 #include <atomic>
 #include <entt/entt.hpp>
 #include <optional>

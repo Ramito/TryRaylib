@@ -4,7 +4,7 @@
 #include "Menu.h"
 #include "Render/Render.h"
 #include "Simulation/Simulation.h"
-#include "Tracy.hpp"
+#include <tracy/Tracy.hpp>
 #include "entt/entt.hpp"
 #include "raylib.h"
 #include "raymath.h"
